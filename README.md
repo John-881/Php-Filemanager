@@ -27,10 +27,10 @@
 
 ```bash
 # 克隆仓库
-git clone https://github.com/yourusername/php-filemanager-secure.git
+git clone https://github.com/John-881/Php-Filemanager.git
 
 # 或直接下载
-wget https://example.com/filemanager_fixed.php
+wget https://raw.githubusercontent.com/John-881/Php-Filemanager/refs/heads/master/filemanager.php
 ```
 
 ### 2. 配置密码
