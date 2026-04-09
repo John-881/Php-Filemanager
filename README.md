@@ -1,171 +1,121 @@
 # PHP File Manager - 安全增强版
 
-一个基于 PHP 的单文件在线文件管理器，经过安全增强和界面优化，适配 PHP 8.3。
+一个功能强大且安全的 PHP 文件管理器，基于 [alexantr/filemanager](https://github.com/alexantr/filemanager) 进行了全面的安全增强和功能改进。
 
-## 📋 功能特点
+## ✨ 特性
 
-- 🔐 **安全增强**
-  - CSRF 令牌保护所有写操作
-  - 路径遍历防护（使用 `realpath()` 验证）
-  - 文件扩展名白名单验证
-  - 安全的密码哈希（支持 `password_hash`）
-  - IP 白名单/黑名单支持
-  - 会话安全（登录后重新生成 Session ID）
-  - 安全 HTTP 响应头
+- 🔐 **多层安全防护** - CSRF 保护、会话劫持防护、登录暴力破解防护
+- 📁 **完整文件操作** - 上传、下载、复制、移动、删除、重命名、权限修改
+- 📦 **压缩/解压支持** - 支持 ZIP 格式的打包和解包
+- 👁️ **在线预览** - 支持图片、音视频、文本、代码高亮、Office/PDF（通过 Google/Microsoft 在线查看器）
+- 🚀 **分块上传** - 支持大文件分块上传，带进度显示和断点续传
+- 📱 **响应式界面** - 现代化的 UI 设计，支持移动端适配
+- 🔐 **用户认证** - 多用户支持，可配置只读用户和目录限制
+- 🌍 **IP 访问控制** - 支持 IP 白名单/黑名单
 
-- 📁 **文件管理**
-  - 浏览目录、查看文件
-  - 创建、重命名、删除文件和文件夹
-  - 复制、移动文件和文件夹
-  - 批量操作（删除、复制、打包）
-  - 文件上传（支持多文件、大文件分块上传）
-  - 文件下载
+## 📋 系统要求
 
-- 👁️ **文件预览**
-  - 图片预览（支持缩放）
-  - 音频/视频播放
-  - 文本文件语法高亮（Highlight.js）
-  - 代码文件高亮（PHP、HTML、CSS、JS 等）
-  - ZIP 压缩包内容预览
-  - Office 文档在线预览（Google/Microsoft Viewer）
+- PHP 7.4+ （推荐 PHP 8.3）
+- ZipArchive 扩展（用于压缩/解压功能）
+- Fileinfo 扩展（用于 MIME 类型检测）
+- MBString 扩展（用于多字节字符处理）
+- 可写的文件系统权限
 
-- 🎨 **界面优化**
-  - 现代化响应式设计
-  - 深色/浅色主题支持
-  - 面包屑导航（带斜杠分隔）
-  - 彩色图标按钮
-  - 悬停效果
-  - 快捷键支持
+## 🚀 快速开始
 
-- 👥 **用户管理**
-  - 多用户支持
-  - 只读用户
-  - 用户目录隔离
-  - 全局只读模式
+### 1. 下载安装
 
-## 📦 安装部署
+```bash
+# 克隆仓库
+git clone https://github.com/yourusername/php-filemanager-secure.git
 
-### 快速开始
+# 或直接下载
+wget https://example.com/filemanager_fixed.php
+```
 
-1. 下载 `filemanager.php` 文件
-2. 上传到服务器网站目录
-3. 访问 `https://yourdomain.com/filemanager.php`
+### 2. 配置密码
 
-### 首次配置
+首先需要生成密码哈希：
 
-打开文件，修改以下配置：
+```bash
+php -r "echo password_hash('your_strong_password', PASSWORD_DEFAULT);"
+```
+
+然后将生成的哈希值填入 `$auth_users` 数组：
 
 ```php
-// 认证开关
-$use_auth = true;
-
-// 用户凭证 - 请立即修改默认密码！
-// 使用 password_hash('your_password', PASSWORD_DEFAULT) 生成
 $auth_users = array(
-    'admin' => '',
+    'admin' => '$2y$10$YourGeneratedHashHere...',
 );
+```
 
-// 只读用户
-$readonly_users = array('guest');
+### 3. 基础配置
 
-// 根路径（限制访问范围）
-$root_path = $_SERVER['DOCUMENT_ROOT'] . '/uploads';
+编辑文件开头的配置部分：
 
-// 允许上传的文件扩展名
+```php
+// 根路径 - 强烈建议限制为特定目录
+$root_path = '/var/www/uploads';  // 不要使用 $_SERVER['DOCUMENT_ROOT']
+
+// 允许上传的文件类型
 $allowed_upload_extensions = 'jpg,jpeg,png,gif,pdf,doc,docx,xls,xlsx,txt,zip';
 
 // 最大上传大小（字节）- 100MB
 $max_upload_size_bytes = 104857600;
 
-// IP 白名单
-$ip_whitelist = array('127.0.0.1', '::1', '你的IP');
-$ip_ruleset = 'AND';  // OFF / AND / OR
+// 时区设置
+$default_timezone = 'Asia/Shanghai';
 ```
 
-### 生成密码哈希
+### 4. 部署
 
-请使用`passwd.php`文件在本地或上传到需要使用的位置访问网页进行生成
+将 `filemanager_fixed.php` 上传到您的服务器，通过浏览器访问即可。
 
-或使用 PHP 命令：
+> ⚠️ **安全提示**：建议将文件管理器放在需要认证的独立目录中，不要暴露在网站根目录。
 
-```php
-php -r "echo password_hash('your_password', PASSWORD_DEFAULT);"
-```
+## ⚙️ 配置选项
 
-## 🔧 高级配置
+| 配置项 | 默认值 | 说明 |
+|--------|--------|------|
+| `$use_auth` | `true` | 是否启用登录认证 |
+| `$auth_users` | `array()` | 用户名 => 密码哈希的映射 |
+| `$readonly_users` | `array()` | 只读用户列表 |
+| `$global_readonly` | `false` | 全局只读模式 |
+| `$directories_users` | `array()` | 用户目录限制 |
+| `$root_path` | `$_SERVER['DOCUMENT_ROOT']` | 根目录路径 |
+| `$allowed_upload_extensions` | `'jpg,jpeg,png,gif,pdf,doc,docx,xls,xlsx,txt,zip'` | 允许上传的文件扩展名 |
+| `$max_upload_size_bytes` | `104857600` | 最大上传大小（100MB） |
+| `$show_hidden_files` | `true` | 是否显示隐藏文件 |
+| `$ip_ruleset` | `'OFF'` | IP 规则（'OFF', 'AND', 'OR'） |
+| `$ip_whitelist` | `array('127.0.0.1', '::1')` | IP 白名单 |
+| `$ip_blacklist` | `array()` | IP 黑名单 |
+| `$online_viewer` | `'google'` | 在线文档查看器（'google', 'microsoft', false） |
+| `$csrf_protection` | `true` | CSRF 保护开关 |
 
-### 用户目录隔离
+## 🔒 安全特性
 
-```php
-$directories_users = array(
-    'user1' => '/home/user1/files',
-    'user2' => '/home/user2/docs',
-);
-```
+### 认证与授权
+- 密码使用 `password_hash()` 加密存储
+- 登录失败限制（5次/15分钟锁定）
+- 会话劫持防护（验证 User-Agent 和 IP）
+- 会话固定攻击防护（登录后重新生成会话 ID）
 
-### 外部配置文件
+### 文件操作安全
+- 路径遍历防护（`realpath` 验证）
+- 文件扩展名白名单验证
+- 上传文件 MIME 类型检测
+- 敏感文件名过滤（如 `.htaccess`）
+- 大文件分块下载防止内存溢出
 
-创建 `filemanager_config.php` 覆盖默认配置：
+### Web 安全
+- CSRF Token 保护所有状态变更操作
+- 安全响应头（X-Frame-Options, X-Content-Type-Options 等）
+- Cookie 安全标志（HttpOnly, SameSite=Strict, Secure）
+- 输出 HTML 编码防止 XSS
 
-```php
-<?php
-$use_auth = true;
-$auth_users = array('admin' => '$2y$10$...');
-$root_path = '/var/www/mydata';
-$show_hidden_files = true;
-```
+## 📖 使用说明
 
-### 隐藏文件显示
-
-```php
-$show_hidden_files = true;  // 显示 . 开头的文件
-```
-
-### 在线文档查看器
-
-```php
-$online_viewer = 'google';  // 'google', 'microsoft' 或 false
-```
-
-## 🛡️ 安全建议
-
-1. **立即修改默认密码**
-2. **限制根路径**：将 `$root_path` 设置为特定目录
-3. **限制上传扩展名**：只允许必要的文件类型
-4. **启用 IP 白名单**：`$ip_ruleset = 'AND'`
-5. **使用 HTTPS**：保护传输安全
-6. **定期更新 PHP**：使用 PHP 8.0+
-7. **设置适当权限**：
-   ```bash
-   chmod 640 filemanager.php
-   chown www-data:www-data filemanager.php
-   ```
-
-8. **Nginx 额外防护**：
-   ```nginx
-   location ~ /filemanager\.php {
-       # 限制请求方法
-       limit_except GET POST { deny all; }
-       
-       # 限制上传大小
-       client_max_body_size 100M;
-   }
-   ```
-
-9. **Apache .htaccess 防护**：
-   ```apache
-   <Files "filemanager.php">
-       Order Allow,Deny
-       Allow from all
-   </Files>
-   
-   <Files "filemanager_config.php">
-       Order Allow,Deny
-       Deny from all
-   </Files>
-   ```
-
-## ⌨️ 快捷键
+### 快捷键
 
 | 快捷键 | 功能 |
 |--------|------|
@@ -173,47 +123,83 @@ $online_viewer = 'google';  // 'google', 'microsoft' 或 false
 | `U` | 打开上传页面 |
 | `N` | 新建文件夹 |
 
-## 📱 界面预览
+### 批量操作
 
-### 文件列表
-- 面包屑导航显示当前路径（斜杠分隔）
-- 彩色操作按钮（上传、新建、删除等）
-- 文件/文件夹图标区分
-- 权限和所有者信息（Linux）
+1. 勾选需要操作的文件/文件夹
+2. 点击底部的操作按钮：
+   - **删除选中** - 删除所有选中项
+   - **打包为ZIP** - 将选中项打包为 ZIP 压缩包
+   - **复制选中** - 批量复制到其他目录
 
 ### 文件预览
-- 图片：支持缩放查看
-- 音视频：HTML5 播放器
-- 代码：语法高亮显示
-- 文档：在线预览
 
-## 🔄 更新日志
+- **图片**：直接显示预览，支持懒加载
+- **音视频**：使用 HTML5 播放器
+- **文本/代码**：支持语法高亮（需开启 Highlight.js）
+- **Office/PDF**：通过 Google Docs 或 Microsoft Office 在线查看
 
-### v2.0-secure (2024)
-- ✨ 全面安全增强
-- ✨ PHP 8.3 兼容
-- ✨ CSRF 保护
-- ✨ 路径遍历修复
-- ✨ 界面现代化改造
-- ✨ 添加根目录快捷按钮
-- ✨ 优化面包屑导航（斜杠分隔）
-- ✨ 彩色图标按钮
-- 🐛 修复多个已知漏洞
+## 🌐 外部配置文件
 
-## ⚠️ 免责声明
+您可以创建 `filemanager_config.php` 来覆盖默认配置：
 
-本工具仅供授权管理员使用。请勿在未经授权的情况下部署于生产环境。使用者需自行承担安全责任。
+```php
+<?php
+// filemanager_config.php
+$use_auth = true;
+$auth_users = array(
+    'admin' => '$2y$10$...',
+    'user' => '$2y$10$...',
+);
+$readonly_users = array('user');
+$root_path = '/var/www/user_uploads';
+$allowed_upload_extensions = 'jpg,jpeg,png,gif,pdf,zip';
+$default_timezone = 'Asia/Shanghai';
+```
+
+## 🛠️ 故障排除
+
+### 上传失败
+
+1. 检查 `upload_max_filesize` 和 `post_max_size` PHP 配置
+2. 确认目标目录有写入权限
+3. 检查 `$allowed_upload_extensions` 配置
+
+### 无法登录
+
+1. 确认密码哈希生成正确
+2. 检查会话目录是否有写入权限
+3. 清除浏览器 Cookie 后重试
+
+### 路径错误
+
+1. 确认 `$root_path` 目录存在且可读
+2. 检查 PHP `open_basedir` 限制
+
+## ⚠️ 安全建议
+
+1. **立即修改默认密码** - 不要使用空密码或弱密码
+2. **限制根路径** - 将 `$root_path` 设置为特定目录，而非网站根目录
+3. **使用 HTTPS** - 始终通过 HTTPS 访问，保护登录凭证
+4. **定期更新** - 关注安全更新，及时升级
+5. **限制访问 IP** - 使用 IP 白名单功能限制访问来源
+6. **文件类型限制** - 只开放必要的文件扩展名上传
 
 ## 📄 许可证
 
-基于 [alexantr/filemanager](https://github.com/alexantr/filemanager) 修改
-
-MIT License
+本项目基于 MIT 许可证开源。原始项目 [alexantr/filemanager](https://github.com/alexantr/filemanager) 采用 MIT 许可证。
 
 ## 🤝 贡献
 
 欢迎提交 Issue 和 Pull Request！
 
-## 📧 联系方式
+## 📝 更新日志
 
-如有问题或建议，请提交 GitHub Issue。
+### v2.0-secure-final
+
+- 全面的安全审计和修复
+- 添加登录失败限制和会话劫持防护
+- 增强文件上传安全验证
+- 改进 CSRF 保护机制
+- 优化大文件处理和内存使用
+- 添加安全响应头
+- 修复多个 XSS 和路径遍历漏洞
