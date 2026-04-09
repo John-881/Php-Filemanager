@@ -62,7 +62,7 @@ $use_auth = true;
 // 用户凭证 - 请立即修改默认密码！
 // 使用 password_hash('your_password', PASSWORD_DEFAULT) 生成
 $auth_users = array(
-    'admin' => '$2y$10$YourNewHashHere',
+    'admin' => '',
 );
 
 // 只读用户
