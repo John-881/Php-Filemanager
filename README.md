@@ -69,7 +69,7 @@ $default_timezone = 'Asia/Shanghai';
 
 ### 4. 部署
 
-将 `filemanager_fixed.php` 上传到您的服务器，通过浏览器访问即可。
+将 `filemanager.php` 上传到您的服务器，通过浏览器访问即可。
 
 > ⚠️ **安全提示**：建议将文件管理器放在需要认证的独立目录中，不要暴露在网站根目录。
 
