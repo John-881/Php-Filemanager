@@ -84,7 +84,9 @@ $ip_ruleset = 'AND';  // OFF / AND / OR
 
 ### 生成密码哈希
 
-请使用`passwd.php`网页在上生成 或使用 PHP 命令：
+请使用`passwd.php`文件在本地或上传到需要使用的位置访问网页进行生成
+
+或使用 PHP 命令：
 
 ```php
 php -r "echo password_hash('your_password', PASSWORD_DEFAULT);"
