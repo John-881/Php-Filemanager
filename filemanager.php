@@ -1,12 +1,12 @@
 <?php
 /**
- * PHP File Manager - Security Enhanced Version
+ * PHP File Manager - Security Enhanced Version (Final)
  * Original: https://github.com/alexantr/filemanager
- * Enhanced for PHP 8.3 with security improvements
+ * Enhanced for PHP 8.3 with comprehensive security improvements
+ * Version: 2.0-secure-final
  */
 
 // --- 安全配置 ---
-// 认证开关
 $use_auth = true;
 
 // 用户凭证 - 请立即修改默认密码！
@@ -15,87 +15,45 @@ $auth_users = array(
     'admin' => '', // 请使用 password_hash() 生成新密码
 );
 
-// 只读用户列表
 $readonly_users = array();
-
-// 全局只读模式
 $global_readonly = false;
-
-// 用户目录限制 (用户名 => 目录路径)
 $directories_users = array();
 
-// 启用 highlight.js
 $use_highlightjs = true;
-
-// highlight.js 样式
 $highlightjs_style = 'vs';
-
-// 默认时区
 $default_timezone = 'UTC';
-
-// 根路径 - 限制访问范围
 $root_path = $_SERVER['DOCUMENT_ROOT'];
-
-// 根URL
 $root_url = '';
-
-// 服务器主机名
-$http_host = $_SERVER['HTTP_HOST'];
-
-// 输入编码
+$http_host = $_SERVER['HTTP_HOST'] ?? 'localhost';
 $iconv_input_encoding = 'UTF-8';
-
-// 日期格式
 $datetime_format = 'Y-m-d H:i:s';
-
-// 允许的文件扩展名 (创建/重命名) - 留空允许所有
 $allowed_file_extensions = '';
-
-// 允许上传的文件扩展名 - 强烈建议限制！
 $allowed_upload_extensions = 'jpg,jpeg,png,gif,pdf,doc,docx,xls,xlsx,txt,zip';
-
-// 显示隐藏文件 (以点开头的文件)
 $show_hidden_files = true;
-
-// 隐藏权限/所有者列
 $hide_Cols = false;
-
-// 排除项目 (不显示的文件/文件夹)
 $exclude_items = array();
-
-// 在线文档查看器 ('google', 'microsoft' 或 false)
 $online_viewer = 'google';
-
-// 最大上传大小 (字节) - 默认 100MB
 $max_upload_size_bytes = 104857600;
-
-// IP 规则 ('OFF', 'AND', 'OR')
 $ip_ruleset = 'OFF';
-
-// IP 白名单
 $ip_whitelist = array('127.0.0.1', '::1');
-
-// IP 黑名单
 $ip_blacklist = array();
-
-// 路径显示模式 ('full', 'relative', 'host')
 $path_display_mode = 'full';
-
-// CSRF 保护
 $csrf_protection = true;
 
-// 会话名称
+// 会话配置
 define('FM_SESSION_ID', 'filemanager_secure');
+define('VERSION', '2.0-secure-final');
 
-// 版本
-define('VERSION', '2.0-secure');
+// 安全常量
+define('FM_MIN_PASSWORD_LENGTH', 8);
+define('FM_MAX_LOGIN_ATTEMPTS', 5);
+define('FM_LOGIN_TIMEOUT', 900); // 15分钟锁定
 
 // --- 以下一般不需要修改 ---
 
 $is_https = isset($_SERVER['HTTPS']) && (strtolower($_SERVER['HTTPS']) == 'on' || $_SERVER['HTTPS'] == 1)
     || isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] == 'https';
 
-// 加载外部配置
 $config_file = __DIR__ . '/filemanager_config.php';
 if (is_readable($config_file)) {
     include $config_file;
@@ -117,25 +75,37 @@ if (!defined('FM_EMBED')) {
     session_cache_limiter('nocache');
     session_name(FM_SESSION_ID);
     
-    // 安全的会话启动
+    // 安全会话配置
+    ini_set('session.cookie_httponly', '1');
+    ini_set('session.cookie_samesite', 'Strict');
+    ini_set('session.use_strict_mode', '1');
+    if ($is_https) {
+        ini_set('session.cookie_secure', '1');
+    }
+    
     if (session_status() === PHP_SESSION_NONE) {
         session_start();
     }
 }
 
-// 生成 CSRF Token
-if ($csrf_protection && empty($_SESSION['csrf_token'])) {
-    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+// CSRF Token 管理
+if ($csrf_protection) {
+    if (empty($_SESSION['csrf_token'])) {
+        $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+    }
+    // Token 过期检查 (1小时)
+    if (!empty($_SESSION['csrf_token_time']) && time() - $_SESSION['csrf_token_time'] > 3600) {
+        $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+    }
+    $_SESSION['csrf_token_time'] = time();
 }
 
-// 验证 CSRF Token
 function verify_csrf_token($token) {
     global $csrf_protection;
     if (!$csrf_protection) return true;
     return isset($_SESSION['csrf_token']) && hash_equals($_SESSION['csrf_token'], $token);
 }
 
-// 获取 CSRF Token
 function get_csrf_token() {
     global $csrf_protection;
     return $csrf_protection ? ($_SESSION['csrf_token'] ?? '') : '';
@@ -155,10 +125,8 @@ if (!@is_dir($root_path)) {
     die(sprintf('<h1>Root path "%s" not found!</h1>', fm_enc($root_path)));
 }
 
-// 清理根URL
 $root_url = fm_clean_path($root_url);
 
-// 定义常量
 defined('FM_ROOT_PATH') || define('FM_ROOT_PATH', $root_path);
 defined('FM_ROOT_URL') || define('FM_ROOT_URL', ($is_https ? 'https' : 'http') . '://' . $http_host . (!empty($root_url) ? '/' . $root_url : ''));
 defined('FM_SELF_URL') || define('FM_SELF_URL', ($is_https ? 'https' : 'http') . '://' . $http_host . $_SERVER['PHP_SELF']);
@@ -167,7 +135,8 @@ defined('FM_SELF_URL') || define('FM_SELF_URL', ($is_https ? 'https' : 'http') .
 if (isset($_GET['logout'])) {
     $_SESSION = array();
     if (isset($_COOKIE[session_name()])) {
-        setcookie(session_name(), '', time() - 42000, '/');
+        $params = session_get_cookie_params();
+        setcookie(session_name(), '', time() - 42000, $params['path'], $params['domain'], $params['secure'], $params['httponly']);
     }
     session_destroy();
     fm_redirect(FM_SELF_URL);
@@ -197,12 +166,27 @@ if ($ip_ruleset != 'OFF') {
     }
 }
 
+// 登录失败限制
+if (!isset($_SESSION['login_attempts'])) {
+    $_SESSION['login_attempts'] = 0;
+    $_SESSION['login_lock_time'] = 0;
+}
+
 // 认证
 if ($use_auth) {
     if (isset($_SESSION['logged'], $auth_users[$_SESSION['logged']])) {
-        // 已登录
+        // 已登录 - 验证会话完整性
+        if (!isset($_SESSION['user_agent'])) {
+            $_SESSION['user_agent'] = $_SERVER['HTTP_USER_AGENT'] ?? '';
+            $_SESSION['ip_address'] = getClientIP();
+        } elseif ($_SESSION['user_agent'] !== ($_SERVER['HTTP_USER_AGENT'] ?? '') || 
+                  $_SESSION['ip_address'] !== getClientIP()) {
+            // 会话劫持检测
+            unset($_SESSION['logged']);
+            fm_set_msg('Session security check failed. Please login again.', 'error');
+            fm_redirect(FM_SELF_URL);
+        }
         
-        // 更新用户目录
         if (isset($directories_users[$_SESSION['logged']])) {
             $root_path = $directories_users[$_SESSION['logged']];
             if (!@is_dir($root_path)) {
@@ -210,24 +194,35 @@ if ($use_auth) {
             }
         }
         
-        // 检查只读状态
         $is_readonly = $global_readonly || in_array($_SESSION['logged'], $readonly_users);
     } elseif (isset($_POST['fm_usr'], $_POST['fm_pwd'])) {
         // 登录处理
         sleep(1);
+        
+        // 检查锁定状态
+        if ($_SESSION['login_lock_time'] > time()) {
+            $remaining = $_SESSION['login_lock_time'] - time();
+            fm_set_msg("Too many failed attempts. Please wait {$remaining} seconds.", 'error');
+            fm_redirect(FM_SELF_URL);
+        }
         
         if ($csrf_protection && !verify_csrf_token($_POST['csrf_token'] ?? '')) {
             fm_set_msg('Invalid security token', 'error');
             fm_redirect(FM_SELF_URL);
         }
         
-        $username = $_POST['fm_usr'];
+        $username = trim($_POST['fm_usr']);
         $password = $_POST['fm_pwd'];
+        
+        // 输入长度限制
+        if (strlen($username) > 64 || strlen($password) > 128) {
+            fm_set_msg('Invalid input length', 'error');
+            fm_redirect(FM_SELF_URL);
+        }
         
         if (isset($auth_users[$username])) {
             $stored_hash = $auth_users[$username];
             
-            // 支持明文密码(向后兼容)和哈希密码
             if (password_get_info($stored_hash)['algo'] > 0) {
                 $valid = password_verify($password, $stored_hash);
             } else {
@@ -235,18 +230,33 @@ if ($use_auth) {
             }
             
             if ($valid) {
+                // 登录成功
+                $_SESSION['login_attempts'] = 0;
+                $_SESSION['login_lock_time'] = 0;
                 session_regenerate_id(true);
                 $_SESSION['logged'] = $username;
+                $_SESSION['user_agent'] = $_SERVER['HTTP_USER_AGENT'] ?? '';
+                $_SESSION['ip_address'] = getClientIP();
+                $_SESSION['login_time'] = time();
                 fm_set_msg('You are logged in');
                 fm_redirect(FM_SELF_URL . '?p=');
             } else {
+                // 登录失败
+                $_SESSION['login_attempts']++;
+                if ($_SESSION['login_attempts'] >= FM_MAX_LOGIN_ATTEMPTS) {
+                    $_SESSION['login_lock_time'] = time() + FM_LOGIN_TIMEOUT;
+                    fm_set_msg('Too many failed attempts. Account locked for 15 minutes.', 'error');
+                } else {
+                    $remaining = FM_MAX_LOGIN_ATTEMPTS - $_SESSION['login_attempts'];
+                    fm_set_msg("Wrong password. {$remaining} attempts remaining.", 'error');
+                }
                 unset($_SESSION['logged']);
-                fm_set_msg('Wrong password', 'error');
                 fm_redirect(FM_SELF_URL);
             }
         } else {
-            unset($_SESSION['logged']);
+            $_SESSION['login_attempts']++;
             fm_set_msg('Wrong username or password', 'error');
+            unset($_SESSION['logged']);
             fm_redirect(FM_SELF_URL);
         }
     } else {
@@ -254,16 +264,25 @@ if ($use_auth) {
         unset($_SESSION['logged']);
         fm_show_header();
         fm_show_message();
+        $remaining_attempts = FM_MAX_LOGIN_ATTEMPTS - ($_SESSION['login_attempts'] ?? 0);
+        $is_locked = ($_SESSION['login_lock_time'] ?? 0) > time();
         ?>
         <div class="path">
             <div class="login-form">
                 <h2 style="margin-bottom:20px">PHP File Manager</h2>
-                <form action="" method="post" style="margin:10px;text-align:center">
-                    <input type="text" name="fm_usr" value="" placeholder="Username" required autocomplete="username" style="padding:8px;margin:5px;width:200px"><br>
-                    <input type="password" name="fm_pwd" value="" placeholder="Password" required autocomplete="current-password" style="padding:8px;margin:5px;width:200px"><br>
-                    <input type="hidden" name="csrf_token" value="<?php echo fm_enc(get_csrf_token()); ?>">
-                    <input type="submit" value="Login" style="padding:8px 30px;margin:10px;cursor:pointer">
-                </form>
+                <?php if ($is_locked): ?>
+                    <p style="color:#dc2626">Account temporarily locked. Please wait <?php echo $_SESSION['login_lock_time'] - time(); ?> seconds.</p>
+                <?php else: ?>
+                    <form action="" method="post" style="margin:10px;text-align:center">
+                        <input type="text" name="fm_usr" value="" placeholder="Username" required autocomplete="username" maxlength="64" style="padding:8px;margin:5px;width:200px"><br>
+                        <input type="password" name="fm_pwd" value="" placeholder="Password" required autocomplete="current-password" maxlength="128" style="padding:8px;margin:5px;width:200px"><br>
+                        <input type="hidden" name="csrf_token" value="<?php echo fm_enc(get_csrf_token()); ?>">
+                        <input type="submit" value="Login" style="padding:8px 30px;margin:10px;cursor:pointer">
+                    </form>
+                    <?php if ($_SESSION['login_attempts'] > 0): ?>
+                        <p style="color:#dc2626">Remaining attempts: <?php echo $remaining_attempts; ?></p>
+                    <?php endif; ?>
+                <?php endif; ?>
             </div>
         </div>
         <?php
@@ -317,7 +336,6 @@ defined('FM_FILE_EXT') || define('FM_FILE_EXT', $allowed_file_extensions);
 
 /*************************** ACTIONS ***************************/
 
-// 检查只读权限
 function check_write_permission() {
     if (FM_READONLY) {
         fm_set_msg('Write operations are disabled', 'error');
@@ -325,7 +343,6 @@ function check_write_permission() {
     }
 }
 
-// 验证文件扩展名
 function is_allowed_extension($filename, $type = 'file') {
     $allowed = ($type == 'upload') ? FM_UPLOAD_EXT : FM_FILE_EXT;
     if (empty($allowed)) return true;
@@ -333,11 +350,10 @@ function is_allowed_extension($filename, $type = 'file') {
     $ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
     if (empty($ext)) return true;
     
-    $allowed_arr = explode(',', $allowed);
+    $allowed_arr = array_map('trim', explode(',', $allowed));
     return in_array($ext, $allowed_arr);
 }
 
-// 检查文件是否在排除列表中
 function is_excluded($name, $path) {
     $exclude_items = FM_EXCLUDE_ITEMS;
     if (empty($exclude_items)) return false;
@@ -392,7 +408,8 @@ if (isset($_GET['del'])) {
 if (isset($_GET['new'])) {
     check_write_permission();
     
-    if (!verify_csrf_token($_POST['csrf_token'] ?? $_GET['csrf_token'] ?? '')) {
+    $token = $_POST['csrf_token'] ?? $_GET['csrf_token'] ?? '';
+    if (!verify_csrf_token($token)) {
         fm_set_msg('Invalid security token', 'error');
         fm_redirect(FM_SELF_URL . '?p=' . urlencode(FM_PATH));
     }
@@ -400,6 +417,12 @@ if (isset($_GET['new'])) {
     $new = strip_tags($_GET['new']);
     $new = fm_clean_path($new);
     $new = str_replace('/', '', $new);
+    
+    // 文件夹名长度限制
+    if (strlen($new) > 255) {
+        fm_set_msg('Folder name too long', 'error');
+        fm_redirect(FM_SELF_URL . '?p=' . urlencode(FM_PATH));
+    }
     
     if ($new != '' && $new != '..' && $new != '.') {
         $path = FM_ROOT_PATH;
@@ -424,7 +447,8 @@ if (isset($_GET['new'])) {
 if (isset($_GET['newfile'])) {
     check_write_permission();
     
-    if (!verify_csrf_token($_POST['csrf_token'] ?? $_GET['csrf_token'] ?? '')) {
+    $token = $_POST['csrf_token'] ?? $_GET['csrf_token'] ?? '';
+    if (!verify_csrf_token($token)) {
         fm_set_msg('Invalid security token', 'error');
         fm_redirect(FM_SELF_URL . '?p=' . urlencode(FM_PATH));
     }
@@ -432,6 +456,11 @@ if (isset($_GET['newfile'])) {
     $new = strip_tags($_GET['newfile']);
     $new = fm_clean_path($new);
     $new = str_replace('/', '', $new);
+    
+    if (strlen($new) > 255) {
+        fm_set_msg('File name too long', 'error');
+        fm_redirect(FM_SELF_URL . '?p=' . urlencode(FM_PATH));
+    }
     
     if ($new != '' && $new != '..' && $new != '.') {
         if (!is_allowed_extension($new, 'file')) {
@@ -445,6 +474,7 @@ if (isset($_GET['newfile'])) {
             $file_path = $path . '/' . $new;
             if (!file_exists($file_path)) {
                 if (file_put_contents($file_path, '') !== false) {
+                    chmod($file_path, 0644);
                     fm_set_msg(sprintf('File <b>%s</b> created', fm_enc($new)));
                 } else {
                     fm_set_msg(sprintf('File <b>%s</b> not created', fm_enc($new)), 'error');
@@ -463,7 +493,8 @@ if (isset($_GET['newfile'])) {
 if (isset($_GET['copy'], $_GET['finish'])) {
     check_write_permission();
     
-    if (!verify_csrf_token($_POST['csrf_token'] ?? $_GET['csrf_token'] ?? '')) {
+    $token = $_POST['csrf_token'] ?? $_GET['csrf_token'] ?? '';
+    if (!verify_csrf_token($token)) {
         fm_set_msg('Invalid security token', 'error');
         fm_redirect(FM_SELF_URL . '?p=' . urlencode(FM_PATH));
     }
@@ -593,7 +624,8 @@ if (isset($_POST['file'], $_POST['copy_to'], $_POST['finish'])) {
 if (isset($_GET['ren'], $_GET['to'])) {
     check_write_permission();
     
-    if (!verify_csrf_token($_POST['csrf_token'] ?? $_GET['csrf_token'] ?? '')) {
+    $token = $_POST['csrf_token'] ?? $_GET['csrf_token'] ?? '';
+    if (!verify_csrf_token($token)) {
         fm_set_msg('Invalid security token', 'error');
         fm_redirect(FM_SELF_URL . '?p=' . urlencode(FM_PATH));
     }
@@ -603,12 +635,16 @@ if (isset($_GET['ren'], $_GET['to'])) {
     $new = fm_clean_path($_GET['to']);
     $new = str_replace('/', '', $new);
     
+    if (strlen($new) > 255) {
+        fm_set_msg('New name too long', 'error');
+        fm_redirect(FM_SELF_URL . '?p=' . urlencode(FM_PATH));
+    }
+    
     $path = FM_ROOT_PATH;
     if (FM_PATH != '') {
         $path .= '/' . FM_PATH;
     }
     
-    // 检查是否是文件且需要验证扩展名
     $old_path = $path . '/' . $old;
     if (is_file($old_path) && !is_allowed_extension($new, 'file')) {
         fm_set_msg('File extension not allowed', 'error');
@@ -643,24 +679,37 @@ if (isset($_GET['dl'])) {
     $real_base = realpath(FM_ROOT_PATH);
     
     if ($dl != '' && $real_file !== false && strpos($real_file, $real_base) === 0 && is_file($real_file)) {
-        // 安全的文件下载
         if (session_status() === PHP_SESSION_ACTIVE) {
             session_write_close();
         }
         
         $filename = basename($real_file);
         $mime_type = fm_get_mime_type($real_file);
+        $filesize = filesize($real_file);
+        
+        // 防止大文件导致内存问题
+        if ($filesize > 104857600) { // 100MB
+            ini_set('memory_limit', '256M');
+        }
         
         header('Content-Description: File Transfer');
         header('Content-Type: ' . $mime_type);
-        header('Content-Disposition: attachment; filename="' . $filename . '"');
+        header('Content-Disposition: attachment; filename="' . addslashes($filename) . '"');
         header('Content-Transfer-Encoding: binary');
         header('Expires: 0');
         header('Cache-Control: must-revalidate, post-check=0, pre-check=0');
         header('Pragma: public');
-        header('Content-Length: ' . filesize($real_file));
+        header('Content-Length: ' . $filesize);
         
-        readfile($real_file);
+        // 使用 readfile 分块输出
+        $handle = fopen($real_file, 'rb');
+        if ($handle) {
+            while (!feof($handle)) {
+                echo fread($handle, 8192);
+                flush();
+            }
+            fclose($handle);
+        }
         exit;
     } else {
         fm_set_msg('File not found', 'error');
@@ -673,8 +722,8 @@ if (isset($_POST['upl'])) {
     check_write_permission();
     
     if (!verify_csrf_token($_POST['csrf_token'] ?? '')) {
-        fm_set_msg('Invalid security token', 'error');
-        fm_redirect(FM_SELF_URL . '?p=' . urlencode(FM_PATH));
+        echo json_encode(array('status' => 'error', 'info' => 'Invalid security token'));
+        exit;
     }
     
     $path = FM_ROOT_PATH;
@@ -682,53 +731,119 @@ if (isset($_POST['upl'])) {
         $path .= '/' . FM_PATH;
     }
 
-    $errors = 0;
-    $uploads = 0;
-    $total = count($_FILES['upload']['name'] ?? []);
-    
-    $allowed_ext = FM_UPLOAD_EXT ? explode(',', FM_UPLOAD_EXT) : [];
+    if (!is_writable($path)) {
+        echo json_encode(array('status' => 'error', 'info' => 'Directory not writable'));
+        exit;
+    }
 
-    for ($i = 0; $i < $total; $i++) {
-        $tmp_name = $_FILES['upload']['tmp_name'][$i] ?? '';
-        $filename = $_FILES['upload']['name'][$i] ?? '';
-        $error = $_FILES['upload']['error'][$i] ?? UPLOAD_ERR_NO_FILE;
+    $allowed_ext = FM_UPLOAD_EXT ? array_map('trim', explode(',', FM_UPLOAD_EXT)) : array();
+    $response = array('status' => 'error', 'info' => 'Upload failed');
+
+    $files = $_FILES['upload'] ?? array();
+    $fileCount = count($files['name'] ?? array());
+    
+    for ($i = 0; $i < $fileCount; $i++) {
+        $tmp_name = $files['tmp_name'][$i] ?? '';
+        $filename = $files['name'][$i] ?? '';
+        $error = $files['error'][$i] ?? UPLOAD_ERR_NO_FILE;
+        $size = $files['size'][$i] ?? 0;
         
-        if ($error === UPLOAD_ERR_OK && !empty($tmp_name) && $tmp_name != 'none') {
-            // 检查文件大小
-            if ($_FILES['upload']['size'][$i] > $max_upload_size_bytes) {
-                $errors++;
+        if ($error === UPLOAD_ERR_OK && !empty($tmp_name) && $tmp_name != 'none' && is_uploaded_file($tmp_name)) {
+            if ($size > $max_upload_size_bytes) {
+                $response = array('status' => 'error', 'info' => 'File size exceeds limit');
                 continue;
             }
             
-            // 检查扩展名
             $ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
             if (!empty($allowed_ext) && $ext != '' && !in_array($ext, $allowed_ext)) {
-                $errors++;
+                $response = array('status' => 'error', 'info' => 'File type not allowed');
                 continue;
             }
             
-            // 清理文件名
+            // 防止文件名中的特殊字符
             $filename = fm_sanitize_filename($filename);
+            $target_path = $path . '/' . $filename;
             
-            if (move_uploaded_file($tmp_name, $path . '/' . $filename)) {
-                $uploads++;
+            $chunkIndex = isset($_POST['dzchunkindex']) ? (int)$_POST['dzchunkindex'] : null;
+            $chunkTotal = isset($_POST['dztotalchunkcount']) ? (int)$_POST['dztotalchunkcount'] : null;
+            
+            if ($chunkIndex !== null && $chunkTotal !== null) {
+                // 分块上传
+                $partFile = $target_path . '.part';
+                
+                if ($chunkIndex == 0 && file_exists($partFile)) {
+                    @unlink($partFile);
+                }
+                
+                $out = @fopen($partFile, $chunkIndex == 0 ? 'wb' : 'ab');
+                if ($out) {
+                    $in = @fopen($tmp_name, 'rb');
+                    if ($in) {
+                        while ($buff = fread($in, 4096)) {
+                            fwrite($out, $buff);
+                        }
+                        fclose($in);
+                        fclose($out);
+                        @unlink($tmp_name);
+                        
+                        if ($chunkIndex == $chunkTotal - 1) {
+                            $finalName = $target_path;
+                            $counter = 1;
+                            $pathInfo = pathinfo($finalName);
+                            while (file_exists($finalName)) {
+                                $finalName = $pathInfo['dirname'] . '/' . $pathInfo['filename'] . '_' . $counter . '.' . $pathInfo['extension'];
+                                $counter++;
+                            }
+                            
+                            if (rename($partFile, $finalName)) {
+                                @chmod($finalName, 0644);
+                                $response = array('status' => 'success', 'info' => 'Upload successful');
+                            } else {
+                                $response = array('status' => 'error', 'info' => 'File merge failed');
+                            }
+                        } else {
+                            $response = array('status' => 'success', 'info' => 'Chunk uploaded');
+                        }
+                    } else {
+                        $response = array('status' => 'error', 'info' => 'Cannot read temp file');
+                    }
+                } else {
+                    $response = array('status' => 'error', 'info' => 'Cannot write target file');
+                }
             } else {
-                $errors++;
+                // 普通上传 - 处理重名
+                $finalName = $target_path;
+                $counter = 1;
+                $pathInfo = pathinfo($finalName);
+                while (file_exists($finalName)) {
+                    $finalName = $pathInfo['dirname'] . '/' . $pathInfo['filename'] . '_' . $counter . '.' . $pathInfo['extension'];
+                    $counter++;
+                }
+                
+                if (move_uploaded_file($tmp_name, $finalName)) {
+                    @chmod($finalName, 0644);
+                    $response = array('status' => 'success', 'info' => 'Upload successful');
+                } else {
+                    $response = array('status' => 'error', 'info' => 'File move failed');
+                }
             }
-        } elseif ($error !== UPLOAD_ERR_NO_FILE) {
-            $errors++;
+        } else {
+            $errorMessages = array(
+                UPLOAD_ERR_INI_SIZE => 'File exceeds server limit',
+                UPLOAD_ERR_FORM_SIZE => 'File exceeds form limit',
+                UPLOAD_ERR_PARTIAL => 'File only partially uploaded',
+                UPLOAD_ERR_NO_FILE => 'No file uploaded',
+                UPLOAD_ERR_NO_TMP_DIR => 'Temp folder not found',
+                UPLOAD_ERR_CANT_WRITE => 'File write failed',
+                UPLOAD_ERR_EXTENSION => 'File blocked by extension',
+            );
+            $response = array('status' => 'error', 'info' => $errorMessages[$error] ?? 'Unknown error');
         }
     }
 
-    if ($errors == 0 && $uploads > 0) {
-        fm_set_msg(sprintf('All files uploaded to <b>%s</b>', fm_enc($path)));
-    } elseif ($errors == 0 && $uploads == 0) {
-        fm_set_msg('Nothing uploaded', 'alert');
-    } else {
-        fm_set_msg(sprintf('Error while uploading files. Uploaded files: %s', $uploads), 'error');
-    }
-
-    fm_redirect(FM_SELF_URL . '?p=' . urlencode(FM_PATH));
+    header('Content-Type: application/json');
+    echo json_encode($response);
+    exit;
 }
 
 // 批量删除
@@ -828,7 +943,8 @@ if (isset($_POST['group'], $_POST['zip'])) {
 if (isset($_GET['unzip'])) {
     check_write_permission();
     
-    if (!verify_csrf_token($_POST['csrf_token'] ?? $_GET['csrf_token'] ?? '')) {
+    $token = $_POST['csrf_token'] ?? $_GET['csrf_token'] ?? '';
+    if (!verify_csrf_token($token)) {
         fm_set_msg('Invalid security token', 'error');
         fm_redirect(FM_SELF_URL . '?p=' . urlencode(FM_PATH));
     }
@@ -877,7 +993,7 @@ if (isset($_GET['unzip'])) {
     fm_redirect(FM_SELF_URL . '?p=' . urlencode(FM_PATH));
 }
 
-// 修改权限 (非 Windows)
+// 修改权限
 if (isset($_POST['chmod']) && !FM_IS_WIN) {
     check_write_permission();
     
@@ -925,18 +1041,15 @@ if (isset($_POST['chmod']) && !FM_IS_WIN) {
 
 /*************************** /ACTIONS ***************************/
 
-// 获取当前路径
 $path = FM_ROOT_PATH;
 if (FM_PATH != '') {
     $path .= '/' . FM_PATH;
 }
 
-// 检查路径
 if (!is_dir($path)) {
     fm_redirect(FM_SELF_URL . '?p=');
 }
 
-// 获取父目录
 $parent = fm_get_parent_path(FM_PATH);
 
 $objects = is_readable($path) ? scandir($path) : array();
@@ -949,14 +1062,12 @@ if (is_array($objects)) {
             continue;
         }
         
-        // 隐藏文件过滤
         if (!FM_SHOW_HIDDEN && substr($file, 0, 1) === '.') {
             continue;
         }
         
         $new_path = $path . '/' . $file;
         
-        // 排除项目过滤
         if (is_excluded($file, $new_path)) {
             continue;
         }
@@ -982,40 +1093,437 @@ if (isset($_GET['upload']) && !FM_READONLY) {
     fm_show_nav_path(FM_PATH);
     
     $max_upload_mb = round($max_upload_size_bytes / 1048576, 2);
+    $allowed_ext_display = FM_UPLOAD_EXT ?: 'All files';
     ?>
     <div class="path">
-        <p><b>Uploading files</b></p>
-        <p class="break-word">Destination folder: <?php echo fm_enc(fm_convert_win(FM_ROOT_PATH . '/' . FM_PATH)) ?></p>
-        <p class="break-word">Maximum file size: <?php echo $max_upload_mb ?> MB</p>
-        <p class="break-word">Allowed extensions: <?php echo FM_UPLOAD_EXT ?: 'All' ?></p>
-        <form action="" method="post" enctype="multipart/form-data">
-            <input type="hidden" name="p" value="<?php echo fm_enc(FM_PATH) ?>">
-            <input type="hidden" name="upl" value="1">
-            <input type="hidden" name="csrf_token" value="<?php echo fm_enc(get_csrf_token()); ?>">
-            <div id="upload-fields">
-                <input type="file" name="upload[]" style="margin:5px"><br>
-                <input type="file" name="upload[]" style="margin:5px"><br>
-                <input type="file" name="upload[]" style="margin:5px"><br>
-                <input type="file" name="upload[]" style="margin:5px"><br>
-                <input type="file" name="upload[]" style="margin:5px"><br>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px">
+            <h3 style="margin:0;font-size:18px;font-weight:600">
+                <i class="icon-upload"></i> Upload Files
+            </h3>
+            <a href="?p=<?php echo urlencode(FM_PATH) ?>" style="color:#6b7280"><i class="icon-goback"></i> Back</a>
+        </div>
+        
+        <p class="break-word" style="margin-bottom:15px">
+            <strong>Target folder:</strong> <?php echo fm_enc(fm_convert_win(FM_ROOT_PATH . '/' . FM_PATH)) ?><br>
+            <strong>Max file size:</strong> <?php echo $max_upload_mb ?> MB<br>
+            <strong>Allowed extensions:</strong> <?php echo $allowed_ext_display ?>
+        </p>
+
+        <div class="upload-area" id="upload-area">
+            <div class="upload-icon">📁</div>
+            <div class="upload-text">Click or drag files here to upload</div>
+            <div class="upload-hint">Multiple files supported, max <?php echo $max_upload_mb ?> MB per file</div>
+            <input type="file" id="file-input" multiple accept="<?php echo fm_get_upload_accept(); ?>">
+        </div>
+
+        <div class="upload-queue" id="upload-queue"></div>
+
+        <div class="upload-actions">
+            <div class="upload-summary" id="upload-summary">
+                Ready
             </div>
-            <button type="button" onclick="addUploadField()" style="margin:5px;padding:5px 10px">+ Add more</button>
-            <br>
-            <p>
-                <button class="btn" style="padding:8px 20px"><i class="icon-apply"></i> Upload</button> &nbsp;
-                <b><a href="?p=<?php echo urlencode(FM_PATH) ?>"><i class="icon-cancel"></i> Cancel</a></b>
-            </p>
-        </form>
+            <div class="upload-buttons">
+                <button type="button" class="upload-btn-secondary" onclick="window.location.href='?p=<?php echo urlencode(FM_PATH) ?>'">
+                    Cancel
+                </button>
+                <button type="button" class="upload-btn-primary" id="upload-all-btn" onclick="startAllUploads()">
+                    Start Upload
+                </button>
+            </div>
+        </div>
     </div>
+
     <script>
-    function addUploadField() {
-        var div = document.getElementById('upload-fields');
-        var input = document.createElement('input');
-        input.type = 'file';
-        input.name = 'upload[]';
-        input.style.margin = '5px';
-        div.appendChild(input);
-        div.appendChild(document.createElement('br'));
+    var UPLOAD_CONFIG = {
+        url: window.location.href,
+        path: '<?php echo fm_enc(FM_PATH) ?>',
+        csrf: '<?php echo get_csrf_token(); ?>',
+        chunkSize: 2 * 1024 * 1024,
+        maxFileSize: <?php echo $max_upload_size_bytes; ?>,
+        allowedExtensions: '<?php echo FM_UPLOAD_EXT; ?>'.split(',').filter(Boolean),
+        concurrent: 2,
+        retryTimes: 3,
+        retryDelay: 1000
+    };
+
+    var uploadQueue = [];
+    var uploading = false;
+
+    (function() {
+        var area = document.getElementById('upload-area');
+        var input = document.getElementById('file-input');
+        
+        area.addEventListener('click', function() { input.click(); });
+        input.addEventListener('change', function(e) { addFiles(e.target.files); });
+        
+        area.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            area.classList.add('dragover');
+        });
+        
+        area.addEventListener('dragleave', function() {
+            area.classList.remove('dragover');
+        });
+        
+        area.addEventListener('drop', function(e) {
+            e.preventDefault();
+            area.classList.remove('dragover');
+            addFiles(e.dataTransfer.files);
+        });
+    })();
+
+    function addFiles(files) {
+        var added = 0, skipped = 0;
+        
+        for (var i = 0; i < files.length; i++) {
+            var file = files[i];
+            
+            if (file.size > UPLOAD_CONFIG.maxFileSize) {
+                showToast('File "' + file.name + '" exceeds size limit', 'error');
+                skipped++;
+                continue;
+            }
+            
+            if (UPLOAD_CONFIG.allowedExtensions.length > 0) {
+                var ext = file.name.split('.').pop().toLowerCase();
+                if (!UPLOAD_CONFIG.allowedExtensions.includes(ext)) {
+                    showToast('File "' + file.name + '" type not allowed', 'error');
+                    skipped++;
+                    continue;
+                }
+            }
+            
+            if (uploadQueue.find(function(item) { return item.name === file.name; })) {
+                showToast('File "' + file.name + '" already in queue', 'error');
+                skipped++;
+                continue;
+            }
+            
+            uploadQueue.push(createUploadItem(file));
+            added++;
+        }
+        
+        if (added > 0) {
+            showToast('Added ' + added + ' file(s)' + (skipped > 0 ? ', skipped ' + skipped : ''), 'success');
+        }
+        
+        renderQueue();
+        updateSummary();
+    }
+
+    function createUploadItem(file) {
+        return {
+            id: Date.now() + Math.random(),
+            file: file,
+            name: file.name,
+            size: file.size,
+            status: 'pending',
+            progress: 0,
+            chunks: Math.ceil(file.size / UPLOAD_CONFIG.chunkSize),
+            retryCount: 0,
+            xhr: null
+        };
+    }
+
+    function formatSize(bytes) {
+        if (bytes < 1024) return bytes + ' B';
+        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+        if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+        return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+    }
+
+    function renderQueue() {
+        var html = '';
+        for (var i = 0; i < uploadQueue.length; i++) {
+            var item = uploadQueue[i];
+            html += renderUploadItem(item);
+        }
+        document.getElementById('upload-queue').innerHTML = html;
+        
+        for (var i = 0; i < uploadQueue.length; i++) {
+            (function(item) {
+                var container = document.getElementById('upload-item-' + item.id);
+                if (!container) return;
+                
+                var retryBtn = container.querySelector('.upload-retry');
+                if (retryBtn) retryBtn.onclick = function() { retryUpload(item.id); };
+                
+                var cancelBtn = container.querySelector('.upload-cancel');
+                if (cancelBtn) cancelBtn.onclick = function() { cancelUpload(item.id); };
+                
+                var removeBtn = container.querySelector('.upload-remove');
+                if (removeBtn) removeBtn.onclick = function() { removeFromQueue(item.id); };
+            })(uploadQueue[i]);
+        }
+    }
+
+    function renderUploadItem(item) {
+        var statusClass = '', statusText = '', progressBarClass = '', actions = '';
+        
+        switch (item.status) {
+            case 'pending':
+                statusText = 'Waiting';
+                actions = '<button class="upload-btn upload-cancel">Cancel</button>';
+                break;
+            case 'uploading':
+                statusClass = 'uploading';
+                statusText = 'Uploading ' + item.progress + '%';
+                actions = '<button class="upload-btn upload-cancel">Cancel</button>';
+                break;
+            case 'success':
+                statusClass = 'success';
+                statusText = 'Complete';
+                progressBarClass = 'success';
+                actions = '<button class="upload-btn upload-remove">Remove</button>';
+                break;
+            case 'error':
+                statusClass = 'error';
+                statusText = 'Failed';
+                progressBarClass = 'error';
+                actions = '<button class="upload-btn upload-retry retry">Retry</button> ' +
+                          '<button class="upload-btn upload-remove">Remove</button>';
+                break;
+            case 'cancelled':
+                statusText = 'Cancelled';
+                actions = '<button class="upload-btn upload-retry retry">Retry</button> ' +
+                          '<button class="upload-btn upload-remove">Remove</button>';
+                break;
+        }
+        
+        var errorHtml = item.error ? '<div class="upload-error-message">' + item.error + '</div>' : '';
+        
+        return '<div class="upload-item" id="upload-item-' + item.id + '">' +
+            '<div class="upload-item-header">' +
+                '<span class="upload-item-name" title="' + item.name + '">' + item.name + '</span>' +
+                '<div class="upload-item-status">' +
+                    '<span class="upload-item-size">' + formatSize(item.size) + '</span>' +
+                    '<span class="upload-status-badge ' + statusClass + '">' + statusText + '</span>' +
+                '</div>' +
+            '</div>' +
+            '<div class="upload-progress">' +
+                '<div class="upload-progress-bar ' + progressBarClass + '" style="width:' + item.progress + '%"></div>' +
+            '</div>' +
+            errorHtml +
+            '<div class="upload-item-actions">' + actions + '</div>' +
+        '</div>';
+    }
+
+    function updateSummary() {
+        var stats = { total: uploadQueue.length, success: 0, error: 0, uploading: 0, pending: 0 };
+        
+        for (var i = 0; i < uploadQueue.length; i++) {
+            var item = uploadQueue[i];
+            if (item.status === 'success') stats.success++;
+            else if (item.status === 'error') stats.error++;
+            else if (item.status === 'uploading') stats.uploading++;
+            else if (item.status === 'pending') stats.pending++;
+        }
+        
+        var summary = document.getElementById('upload-summary');
+        var allBtn = document.getElementById('upload-all-btn');
+        
+        if (stats.uploading > 0) {
+            summary.textContent = 'Uploading: ' + stats.success + '/' + stats.total + ' complete';
+            allBtn.textContent = 'Uploading...';
+            allBtn.disabled = true;
+        } else if (stats.pending > 0 || (stats.error > 0 && stats.success + stats.error === stats.total)) {
+            summary.textContent = stats.total + ' file(s), ' + stats.success + ' success, ' + stats.error + ' failed';
+            allBtn.textContent = stats.error > 0 && stats.pending === 0 ? 'Retry Failed' : 'Start Upload';
+            allBtn.disabled = false;
+        } else if (stats.success === stats.total && stats.total > 0) {
+            summary.textContent = 'All uploads complete! ' + stats.total + ' file(s)';
+            allBtn.textContent = 'Complete';
+            allBtn.disabled = true;
+        } else {
+            summary.textContent = 'Ready';
+            allBtn.textContent = 'Start Upload';
+            allBtn.disabled = uploadQueue.length === 0;
+        }
+    }
+
+    function startAllUploads() {
+        if (uploading) return;
+        uploading = true;
+        uploadNextBatch();
+    }
+
+    function uploadNextBatch() {
+        var pending = uploadQueue.filter(function(item) {
+            return item.status === 'pending' || 
+                   (item.status === 'error' && item.retryCount < UPLOAD_CONFIG.retryTimes);
+        });
+        
+        if (pending.length === 0) {
+            uploading = false;
+            updateSummary();
+            
+            var successCount = uploadQueue.filter(function(i) { return i.status === 'success'; }).length;
+            var errorCount = uploadQueue.filter(function(i) { return i.status === 'error'; }).length;
+            
+            if (errorCount > 0) {
+                showToast('Upload complete: ' + successCount + ' success, ' + errorCount + ' failed', 'error');
+            } else if (successCount > 0) {
+                showToast('All uploads successful! ' + successCount + ' file(s)', 'success');
+            }
+            return;
+        }
+        
+        var batch = pending.slice(0, UPLOAD_CONFIG.concurrent);
+        var completed = 0;
+        
+        function onComplete() {
+            completed++;
+            if (completed >= batch.length) {
+                uploadNextBatch();
+            }
+        }
+        
+        for (var i = 0; i < batch.length; i++) {
+            uploadFile(batch[i], onComplete);
+        }
+        
+        updateSummary();
+    }
+
+    function uploadFile(item, callback) {
+        item.status = 'uploading';
+        item.progress = 0;
+        renderQueue();
+        updateSummary();
+        
+        var currentChunk = 0;
+        
+        function uploadNextChunk() {
+            if (item.status === 'cancelled') {
+                callback();
+                return;
+            }
+            
+            if (currentChunk >= item.chunks) {
+                finalizeUpload();
+                return;
+            }
+            
+            var start = currentChunk * UPLOAD_CONFIG.chunkSize;
+            var end = Math.min(start + UPLOAD_CONFIG.chunkSize, item.file.size);
+            var chunk = item.file.slice(start, end);
+            
+            var formData = new FormData();
+            formData.append('upload[]', chunk, item.file.name);
+            formData.append('p', UPLOAD_CONFIG.path);
+            formData.append('upl', '1');
+            formData.append('csrf_token', UPLOAD_CONFIG.csrf);
+            formData.append('dzchunkindex', currentChunk);
+            formData.append('dztotalchunkcount', item.chunks);
+            
+            var xhr = new XMLHttpRequest();
+            item.xhr = xhr;
+            
+            xhr.upload.addEventListener('progress', function(e) {
+                if (e.lengthComputable) {
+                    var chunkProgress = e.loaded / e.total;
+                    var overallProgress = ((currentChunk + chunkProgress) / item.chunks) * 100;
+                    item.progress = Math.round(overallProgress);
+                    renderQueue();
+                }
+            });
+            
+            xhr.addEventListener('load', function() {
+                if (xhr.status === 200) {
+                    try {
+                        var response = JSON.parse(xhr.responseText);
+                        if (response.status === 'success') {
+                            currentChunk++;
+                            uploadNextChunk();
+                        } else {
+                            handleError(response.info || 'Upload failed');
+                        }
+                    } catch (e) {
+                        handleError('Response parse failed');
+                    }
+                } else {
+                    handleError('HTTP ' + xhr.status);
+                }
+            });
+            
+            xhr.addEventListener('error', function() {
+                handleError('Network error');
+            });
+            
+            xhr.addEventListener('abort', function() {
+                callback();
+            });
+            
+            function handleError(msg) {
+                if (item.retryCount < UPLOAD_CONFIG.retryTimes) {
+                    item.retryCount++;
+                    setTimeout(uploadNextChunk, UPLOAD_CONFIG.retryDelay);
+                } else {
+                    item.status = 'error';
+                    item.error = msg;
+                    renderQueue();
+                    updateSummary();
+                    callback();
+                }
+            }
+            
+            xhr.open('POST', UPLOAD_CONFIG.url, true);
+            xhr.send(formData);
+        }
+        
+        function finalizeUpload() {
+            item.status = 'success';
+            item.progress = 100;
+            renderQueue();
+            updateSummary();
+            callback();
+        }
+        
+        uploadNextChunk();
+    }
+
+    function retryUpload(id) {
+        var item = uploadQueue.find(function(i) { return i.id == id; });
+        if (item) {
+            item.status = 'pending';
+            item.progress = 0;
+            item.error = null;
+            item.retryCount = 0;
+            renderQueue();
+            updateSummary();
+            if (!uploading) startAllUploads();
+        }
+    }
+
+    function cancelUpload(id) {
+        var item = uploadQueue.find(function(i) { return i.id == id; });
+        if (item) {
+            if (item.xhr) item.xhr.abort();
+            item.status = 'cancelled';
+            renderQueue();
+            updateSummary();
+        }
+    }
+
+    function removeFromQueue(id) {
+        var index = uploadQueue.findIndex(function(i) { return i.id == id; });
+        if (index !== -1) {
+            uploadQueue.splice(index, 1);
+            renderQueue();
+            updateSummary();
+        }
+    }
+
+    function showToast(message, type) {
+        var toast = document.createElement('div');
+        toast.className = 'upload-toast' + (type ? ' ' + type : '');
+        toast.textContent = message;
+        document.body.appendChild(toast);
+        
+        setTimeout(function() {
+            toast.style.opacity = '0';
+            setTimeout(function() { toast.remove(); }, 300);
+        }, 3000);
     }
     </script>
     <?php
@@ -1159,7 +1667,12 @@ if (isset($_GET['view'])) {
     } elseif (in_array($ext, fm_get_text_exts()) || substr($mime_type, 0, 4) == 'text' || in_array($mime_type, fm_get_text_mimes())) {
         $is_text = true;
         $view_title = 'Text';
-        $content = file_get_contents($real_file);
+        // 限制文本预览大小 (10MB)
+        if ($filesize <= 10485760) {
+            $content = file_get_contents($real_file);
+        } else {
+            $content = '[File too large to preview]';
+        }
     }
 
     ?>
@@ -1190,10 +1703,10 @@ if (isset($_GET['view'])) {
             if ($is_image) {
                 $image_size = @getimagesize($real_file);
                 if ($image_size) {
-                    echo 'Image sizes: ' . $image_size[0] . ' x ' . $image_size[1] . '<br>';
+                    echo 'Image dimensions: ' . $image_size[0] . ' x ' . $image_size[1] . '<br>';
                 }
             }
-            if ($is_text) {
+            if ($is_text && $content !== '[File too large to preview]') {
                 $is_utf8 = fm_is_utf8($content);
                 echo 'Charset: ' . ($is_utf8 ? 'utf-8' : '8 bit') . '<br>';
             }
@@ -1204,14 +1717,13 @@ if (isset($_GET['view'])) {
                 <input type="hidden" name="csrf_token" value="<?php echo fm_enc(get_csrf_token()); ?>">
                 <button type="submit" class="btn"><i class="icon-download"></i> Download</button>
             </form> &nbsp;
-            <b><a href="<?php echo fm_enc($file_url) ?>" target="_blank"><i class="icon-chain"></i> Open</a></b> &nbsp;
+            <b><a href="<?php echo fm_enc($file_url) ?>" target="_blank" rel="noopener noreferrer"><i class="icon-chain"></i> Open</a></b> &nbsp;
             <?php if (!FM_READONLY): ?>
                 <b><a href="?p=<?php echo urlencode(FM_PATH) ?>&amp;del=<?php echo urlencode($file) ?>" onclick="return confirm('Delete this file?');"><i class="icon-cross"></i> Delete</a></b> &nbsp;
                 <b><a href="#" onclick="rename('<?php echo fm_enc(FM_PATH) ?>', '<?php echo fm_enc($file) ?>');return false;"><i class="icon-rename"></i> Rename</a></b> &nbsp;
             <?php endif; ?>
             <?php
             if ($is_zip && $filenames !== false && !FM_READONLY) {
-                $zip_name = pathinfo($real_file, PATHINFO_FILENAME);
                 ?>
                 <b><a href="?p=<?php echo urlencode(FM_PATH) ?>&amp;unzip=<?php echo urlencode($file) ?>&amp;csrf_token=<?php echo urlencode(get_csrf_token()); ?>" onclick="return confirm('Unpack archive?')"><i class="icon-apply"></i> Unpack</a></b> &nbsp;
                 <b><a href="?p=<?php echo urlencode(FM_PATH) ?>&amp;unzip=<?php echo urlencode($file) ?>&amp;tofolder=1&amp;csrf_token=<?php echo urlencode(get_csrf_token()); ?>" onclick="return confirm('Unpack to folder?')"><i class="icon-apply"></i> Unpack to folder</a></b> &nbsp;
@@ -1223,9 +1735,9 @@ if (isset($_GET['view'])) {
         <?php
         if ($is_onlineViewer) {
             if ($online_viewer == 'google') {
-                echo '<iframe src="https://docs.google.com/viewer?embedded=true&url=' . urlencode($file_url) . '" frameborder="0" style="width:100%;min-height:460px"></iframe>';
+                echo '<iframe src="https://docs.google.com/viewer?embedded=true&url=' . urlencode($file_url) . '" frameborder="0" style="width:100%;min-height:460px" sandbox="allow-scripts allow-same-origin allow-popups"></iframe>';
             } elseif ($online_viewer == 'microsoft') {
-                echo '<iframe src="https://view.officeapps.live.com/op/embed.aspx?src=' . urlencode($file_url) . '" frameborder="0" style="width:100%;min-height:460px"></iframe>';
+                echo '<iframe src="https://view.officeapps.live.com/op/embed.aspx?src=' . urlencode($file_url) . '" frameborder="0" style="width:100%;min-height:460px" sandbox="allow-scripts allow-same-origin allow-popups"></iframe>';
             }
         } elseif ($is_zip) {
             if ($filenames !== false) {
@@ -1242,13 +1754,15 @@ if (isset($_GET['view'])) {
                 echo '<p>Error while fetching archive info</p>';
             }
         } elseif ($is_image) {
-            echo '<p><img src="' . fm_enc($file_url) . '" alt="" class="preview-img"></p>';
+            echo '<p><img src="' . fm_enc($file_url) . '" alt="" class="preview-img" loading="lazy"></p>';
         } elseif ($is_audio) {
             echo '<p><audio src="' . fm_enc($file_url) . '" controls preload="metadata"></audio></p>';
         } elseif ($is_video) {
             echo '<div class="preview-video"><video src="' . fm_enc($file_url) . '" width="640" height="360" controls preload="metadata"></video></div>';
         } elseif ($is_text) {
-            if (FM_USE_HIGHLIGHTJS) {
+            if ($content === '[File too large to preview]') {
+                echo '<p><em>File too large to preview. Please download to view.</em></p>';
+            } elseif (FM_USE_HIGHLIGHTJS) {
                 $hljs_classes = array(
                     'shtml' => 'xml', 'htaccess' => 'apache', 'phtml' => 'php',
                     'lock' => 'json', 'svg' => 'xml', 'js' => 'javascript',
@@ -1355,7 +1869,6 @@ $all_files_size = 0;
 <?php if (!FM_IS_WIN && !FM_HIDE_COLS): ?><th style="width:6%">Perms</th><th style="width:10%">Owner</th><?php endif; ?>
 <th style="width:13%"></th></tr>
 <?php
-// 父目录链接
 if ($parent !== false) {
     ?>
 <tr><td></td><td colspan="<?php echo (!FM_IS_WIN && !FM_HIDE_COLS) ? '6' : '4' ?>"><a href="?p=<?php echo urlencode($parent) ?>"><i class="icon-arrow_up"></i> ..</a></td></tr>
@@ -1386,11 +1899,11 @@ foreach ($folders as $f) {
 <?php endif; ?>
 <td style="white-space:nowrap">
 <?php if (!FM_READONLY): ?>
-<a title="删除文件夹" href="?p=<?php echo urlencode(FM_PATH) ?>&amp;del=<?php echo urlencode($f) ?>" onclick="return confirm('确定删除这个文件夹吗？');" style="display:inline-flex;align-items:center;gap:2px;margin-right:6px;color:#dc2626"><i class="icon-cross"></i></a>
-<a title="重命名" href="#" onclick="rename('<?php echo fm_enc(FM_PATH) ?>', '<?php echo fm_enc($f) ?>');return false;" style="display:inline-flex;align-items:center;gap:2px;margin-right:6px;color:#2563eb"><i class="icon-rename"></i></a>
-<a title="复制到..." href="?p=&amp;copy=<?php echo urlencode(trim(FM_PATH . '/' . $f, '/')) ?>" style="display:inline-flex;align-items:center;gap:2px;margin-right:6px;color:#059669"><i class="icon-copy"></i></a>
+<a title="Delete folder" href="?p=<?php echo urlencode(FM_PATH) ?>&amp;del=<?php echo urlencode($f) ?>" onclick="return confirm('Delete this folder?');" style="display:inline-flex;align-items:center;gap:2px;margin-right:6px;color:#dc2626"><i class="icon-cross"></i></a>
+<a title="Rename" href="#" onclick="rename('<?php echo fm_enc(FM_PATH) ?>', '<?php echo fm_enc($f) ?>');return false;" style="display:inline-flex;align-items:center;gap:2px;margin-right:6px;color:#2563eb"><i class="icon-rename"></i></a>
+<a title="Copy to..." href="?p=&amp;copy=<?php echo urlencode(trim(FM_PATH . '/' . $f, '/')) ?>" style="display:inline-flex;align-items:center;gap:2px;margin-right:6px;color:#059669"><i class="icon-copy"></i></a>
 <?php endif; ?>
-<a title="直接链接" href="<?php echo fm_enc(FM_ROOT_URL . (FM_PATH != '' ? '/' . FM_PATH : '') . '/' . $f . '/') ?>" target="_blank" style="display:inline-flex;align-items:center;gap:2px;color:#6b7280"><i class="icon-chain"></i></a>
+<a title="Direct link" href="<?php echo fm_enc(FM_ROOT_URL . (FM_PATH != '' ? '/' . FM_PATH : '') . '/' . $f . '/') ?>" target="_blank" rel="noopener noreferrer" style="display:inline-flex;align-items:center;gap:2px;color:#6b7280"><i class="icon-chain"></i></a>
 </td></tr>
     <?php
     flush();
@@ -1425,14 +1938,14 @@ foreach ($files as $f) {
 <?php endif; ?>
 <td style="white-space:nowrap">
 <?php if (!FM_READONLY): ?>
-<a title="删除文件" href="?p=<?php echo urlencode(FM_PATH) ?>&amp;del=<?php echo urlencode($f) ?>" onclick="return confirm('确定删除这个文件吗？');" style="display:inline-flex;align-items:center;gap:2px;margin-right:6px;color:#dc2626"><i class="icon-cross"></i></a>
-<a title="重命名" href="#" onclick="rename('<?php echo fm_enc(FM_PATH) ?>', '<?php echo fm_enc($f) ?>');return false;" style="display:inline-flex;align-items:center;gap:2px;margin-right:6px;color:#2563eb"><i class="icon-rename"></i></a>
-<a title="复制到..." href="?p=<?php echo urlencode(FM_PATH) ?>&amp;copy=<?php echo urlencode(trim(FM_PATH . '/' . $f, '/')) ?>" style="display:inline-flex;align-items:center;gap:2px;margin-right:6px;color:#059669"><i class="icon-copy"></i></a>
+<a title="Delete file" href="?p=<?php echo urlencode(FM_PATH) ?>&amp;del=<?php echo urlencode($f) ?>" onclick="return confirm('Delete this file?');" style="display:inline-flex;align-items:center;gap:2px;margin-right:6px;color:#dc2626"><i class="icon-cross"></i></a>
+<a title="Rename" href="#" onclick="rename('<?php echo fm_enc(FM_PATH) ?>', '<?php echo fm_enc($f) ?>');return false;" style="display:inline-flex;align-items:center;gap:2px;margin-right:6px;color:#2563eb"><i class="icon-rename"></i></a>
+<a title="Copy to..." href="?p=<?php echo urlencode(FM_PATH) ?>&amp;copy=<?php echo urlencode(trim(FM_PATH . '/' . $f, '/')) ?>" style="display:inline-flex;align-items:center;gap:2px;margin-right:6px;color:#059669"><i class="icon-copy"></i></a>
 <?php endif; ?>
-<a title="直接链接" href="<?php echo fm_enc(FM_ROOT_URL . (FM_PATH != '' ? '/' . FM_PATH : '') . '/' . $f) ?>" target="_blank" style="display:inline-flex;align-items:center;gap:2px;margin-right:6px;color:#6b7280"><i class="icon-chain"></i></a>
+<a title="Direct link" href="<?php echo fm_enc(FM_ROOT_URL . (FM_PATH != '' ? '/' . FM_PATH : '') . '/' . $f) ?>" target="_blank" rel="noopener noreferrer" style="display:inline-flex;align-items:center;gap:2px;margin-right:6px;color:#6b7280"><i class="icon-chain"></i></a>
 <form method="post" style="display:inline" action="?p=<?php echo urlencode(FM_PATH) ?>&amp;dl=<?php echo urlencode($f) ?>">
 <input type="hidden" name="csrf_token" value="<?php echo fm_enc(get_csrf_token()); ?>">
-<button type="submit" title="下载" style="display:inline-flex;align-items:center;gap:2px;padding:0;background:none;border:none;color:#2563eb;cursor:pointer"><i class="icon-download"></i></button>
+<button type="submit" title="Download" style="display:inline-flex;align-items:center;gap:2px;padding:0;background:none;border:none;color:#2563eb;cursor:pointer"><i class="icon-download"></i></button>
 </form>
 </td></tr>
     <?php
@@ -1446,7 +1959,7 @@ if (empty($folders) && empty($files)) {
 } else {
     ?>
 <tr><td class="gray"></td><td class="gray" colspan="<?php echo (!FM_IS_WIN && !FM_HIDE_COLS) ? '6' : '4' ?>">
-Full size: <span title="<?php printf('%s bytes', $all_files_size) ?>"><?php echo fm_get_filesize($all_files_size) ?></span>,
+Total size: <span title="<?php printf('%s bytes', $all_files_size) ?>"><?php echo fm_get_filesize($all_files_size) ?></span>,
 files: <?php echo $num_files ?>,
 folders: <?php echo $num_folders ?>
 </td></tr>
@@ -1456,24 +1969,24 @@ folders: <?php echo $num_folders ?>
 </table>
 
 <p class="path" style="display:flex;flex-wrap:wrap;align-items:center;gap:8px">
-<a href="?p=" title="回到根目录" style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:#f3f4f6;border-radius:4px"><i class="icon-home"></i>根目录</a>
+<a href="?p=" title="Root directory" style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:#f3f4f6;border-radius:4px"><i class="icon-home"></i> Root</a>
 <span style="color:#d1d5db">|</span>
-<a href="#" onclick="select_all();return false;" style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px"><i class="icon-checkbox"></i>全选</a>
-<a href="#" onclick="unselect_all();return false;" style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px"><i class="icon-checkbox_uncheck"></i>取消全选</a>
-<a href="#" onclick="invert_all();return false;" style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px"><i class="icon-checkbox_invert"></i>反选</a>
+<a href="#" onclick="select_all();return false;" style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px"><i class="icon-checkbox"></i> Select All</a>
+<a href="#" onclick="unselect_all();return false;" style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px"><i class="icon-checkbox_uncheck"></i> Deselect All</a>
+<a href="#" onclick="invert_all();return false;" style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px"><i class="icon-checkbox_invert"></i> Invert</a>
 <?php if (!FM_READONLY): ?>
 <span style="color:#d1d5db">|</span>
-<a href="#" onclick="newfolder('<?php echo fm_enc(FM_PATH) ?>');return false;" style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:#dcfce7;color:#166534;border-radius:4px"><i class="icon-folder_add"></i>新建文件夹</a>
-<a href="#" onclick="newfile('<?php echo fm_enc(FM_PATH) ?>');return false;" style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:#fef3c7;color:#92400e;border-radius:4px"><i class="icon-document"></i>新建文件</a>
-<a href="?p=<?php echo urlencode(FM_PATH) ?>&amp;upload" style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:#e0f2fe;color:#0369a1;border-radius:4px"><i class="icon-upload"></i>上传文件</a>
+<a href="#" onclick="newfolder('<?php echo fm_enc(FM_PATH) ?>');return false;" style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:#dcfce7;color:#166534;border-radius:4px"><i class="icon-folder_add"></i> New Folder</a>
+<a href="#" onclick="newfile('<?php echo fm_enc(FM_PATH) ?>');return false;" style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:#fef3c7;color:#92400e;border-radius:4px"><i class="icon-document"></i> New File</a>
+<a href="?p=<?php echo urlencode(FM_PATH) ?>&amp;upload" style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:#e0f2fe;color:#0369a1;border-radius:4px"><i class="icon-upload"></i> Upload</a>
 <?php endif; ?>
 </p>
 
 <?php if (!FM_READONLY): ?>
 <p style="display:flex;gap:8px;margin-top:10px">
-<button type="submit" name="delete" onclick="return confirm('确认删除选中的文件和文件夹？')" style="display:inline-flex;align-items:center;gap:4px;padding:6px 16px;background:#fee2e2;color:#991b1b;border:1px solid #fecaca;border-radius:6px;cursor:pointer"><i class="icon-cross"></i>删除选中</button>
-<button type="submit" name="zip" onclick="return confirm('确认创建压缩包？')" style="display:inline-flex;align-items:center;gap:4px;padding:6px 16px;background:#f3f4f6;border:1px solid #d1d5db;border-radius:6px;cursor:pointer"><i class="icon-file_zip"></i>打包为ZIP</button>
-<button type="submit" name="copy" style="display:inline-flex;align-items:center;gap:4px;padding:6px 16px;background:#f3f4f6;border:1px solid #d1d5db;border-radius:6px;cursor:pointer"><i class="icon-copy"></i>复制选中</button>
+<button type="submit" name="delete" onclick="return confirm('Delete selected items?')" style="display:inline-flex;align-items:center;gap:4px;padding:6px 16px;background:#fee2e2;color:#991b1b;border:1px solid #fecaca;border-radius:6px;cursor:pointer"><i class="icon-cross"></i> Delete Selected</button>
+<button type="submit" name="zip" onclick="return confirm('Create archive?')" style="display:inline-flex;align-items:center;gap:4px;padding:6px 16px;background:#f3f4f6;border:1px solid #d1d5db;border-radius:6px;cursor:pointer"><i class="icon-file_zip"></i> Pack as ZIP</button>
+<button type="submit" name="copy" style="display:inline-flex;align-items:center;gap:4px;padding:6px 16px;background:#f3f4f6;border:1px solid #d1d5db;border-radius:6px;cursor:pointer"><i class="icon-copy"></i> Copy Selected</button>
 </p>
 <?php endif; ?>
 
@@ -1484,9 +1997,6 @@ fm_show_footer();
 
 // --- 函数定义 ---
 
-/**
- * 获取客户端 IP
- */
 function getClientIP() {
     $headers = ['HTTP_CF_CONNECTING_IP', 'HTTP_X_FORWARDED_FOR', 'HTTP_CLIENT_IP', 'REMOTE_ADDR'];
     foreach ($headers as $header) {
@@ -1496,6 +2006,9 @@ function getClientIP() {
                 $ips = explode(',', $ip);
                 $ip = trim($ips[0]);
             }
+            if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
+                return $ip;
+            }
             if (filter_var($ip, FILTER_VALIDATE_IP)) {
                 return $ip;
             }
@@ -1504,22 +2017,26 @@ function getClientIP() {
     return '0.0.0.0';
 }
 
-/**
- * 清理文件名
- */
 function fm_sanitize_filename($filename) {
+    // 移除路径信息
+    $filename = basename($filename);
+    // 替换危险字符
     $filename = preg_replace('/[^\p{L}\p{N}\s\._-]/u', '', $filename);
+    // 防止多个点
     $filename = preg_replace('/\.{2,}/', '.', $filename);
+    // 移除首尾空格和点
     $filename = trim($filename, " \t\n\r\0\x0B.");
-    if (empty($filename)) {
+    // 防止空文件名
+    if (empty($filename) || $filename === '.htaccess' || $filename === '.htpasswd') {
         $filename = 'file_' . date('Ymd_His');
+    }
+    // 长度限制
+    if (strlen($filename) > 255) {
+        $filename = substr($filename, 0, 255);
     }
     return $filename;
 }
 
-/**
- * 递归删除
- */
 function fm_rdelete($path) {
     if (is_link($path)) {
         return unlink($path);
@@ -1542,16 +2059,10 @@ function fm_rdelete($path) {
     return false;
 }
 
-/**
- * 重命名
- */
 function fm_rename($old, $new) {
     return (!file_exists($new) && file_exists($old)) ? rename($old, $new) : null;
 }
 
-/**
- * 递归复制
- */
 function fm_rcopy($path, $dest, $upd = true, $force = true) {
     if (is_dir($path)) {
         if (!fm_mkdir($dest, $force)) {
@@ -1575,9 +2086,6 @@ function fm_rcopy($path, $dest, $upd = true, $force = true) {
     return false;
 }
 
-/**
- * 创建目录
- */
 function fm_mkdir($dir, $force) {
     if (file_exists($dir)) {
         if (is_dir($dir)) {
@@ -1587,12 +2095,9 @@ function fm_mkdir($dir, $force) {
         }
         unlink($dir);
     }
-    return mkdir($dir, 0777, true);
+    return mkdir($dir, 0755, true);
 }
 
-/**
- * 复制文件
- */
 function fm_copy($f1, $f2, $upd) {
     $time1 = filemtime($f1);
     if (file_exists($f2)) {
@@ -1608,9 +2113,6 @@ function fm_copy($f1, $f2, $upd) {
     return $ok;
 }
 
-/**
- * 获取 MIME 类型
- */
 function fm_get_mime_type($file_path) {
     if (function_exists('finfo_open')) {
         $finfo = finfo_open(FILEINFO_MIME_TYPE);
@@ -1620,20 +2122,24 @@ function fm_get_mime_type($file_path) {
     } elseif (function_exists('mime_content_type')) {
         return mime_content_type($file_path);
     }
-    return 'application/octet-stream';
+    
+    // 回退到扩展名映射
+    $ext = strtolower(pathinfo($file_path, PATHINFO_EXTENSION));
+    $mime_map = array(
+        'jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg', 'png' => 'image/png',
+        'gif' => 'image/gif', 'pdf' => 'application/pdf', 'txt' => 'text/plain',
+        'html' => 'text/html', 'htm' => 'text/html', 'php' => 'text/plain',
+        'js' => 'application/javascript', 'css' => 'text/css',
+        'zip' => 'application/zip', 'json' => 'application/json',
+    );
+    return $mime_map[$ext] ?? 'application/octet-stream';
 }
 
-/**
- * 重定向
- */
 function fm_redirect($url, $code = 302) {
     header('Location: ' . $url, true, $code);
     exit;
 }
 
-/**
- * 清理路径
- */
 function fm_clean_path($path) {
     $path = trim($path);
     $path = trim($path, '\\/');
@@ -1644,9 +2150,6 @@ function fm_clean_path($path) {
     return str_replace('\\', '/', $path);
 }
 
-/**
- * 获取父路径
- */
 function fm_get_parent_path($path) {
     $path = fm_clean_path($path);
     if ($path != '') {
@@ -1660,9 +2163,6 @@ function fm_get_parent_path($path) {
     return false;
 }
 
-/**
- * 获取显示路径
- */
 function fm_get_display_path($file_path) {
     global $path_display_mode, $root_path, $root_url;
     
@@ -1686,9 +2186,6 @@ function fm_get_display_path($file_path) {
     }
 }
 
-/**
- * 获取文件大小
- */
 function fm_get_filesize($size) {
     $units = array('B', 'KB', 'MB', 'GB', 'TB');
     $power = $size > 0 ? floor(log($size, 1024)) : 0;
@@ -1696,55 +2193,40 @@ function fm_get_filesize($size) {
     return sprintf('%s %s', round($size / pow(1024, $power), 2), $units[$power]);
 }
 
-/**
- * 获取 ZIP 信息
- */
 function fm_get_zif_info($path) {
-    if (function_exists('zip_open')) {
-        $arch = @zip_open($path);
-        if ($arch) {
+    if (class_exists('ZipArchive')) {
+        $zip = new ZipArchive();
+        if ($zip->open($path) === true) {
             $filenames = array();
-            while ($zip_entry = @zip_read($arch)) {
-                $zip_name = @zip_entry_name($zip_entry);
+            for ($i = 0; $i < $zip->numFiles; $i++) {
+                $stat = $zip->statIndex($i);
                 $filenames[] = array(
-                    'name' => $zip_name,
-                    'filesize' => @zip_entry_filesize($zip_entry),
-                    'compressed_size' => @zip_entry_compressedsize($zip_entry),
-                    'folder' => substr($zip_name, -1) == '/'
+                    'name' => $stat['name'],
+                    'filesize' => $stat['size'],
+                    'compressed_size' => $stat['comp_size'],
+                    'folder' => substr($stat['name'], -1) == '/'
                 );
             }
-            @zip_close($arch);
+            $zip->close();
             return $filenames;
         }
     }
     return false;
 }
 
-/**
- * HTML 编码
- */
 function fm_enc($text) {
     return htmlspecialchars($text ?? '', ENT_QUOTES, 'UTF-8');
 }
 
-/**
- * 设置消息
- */
 function fm_set_msg($msg, $status = 'ok') {
     $_SESSION['message'] = $msg;
     $_SESSION['status'] = $status;
 }
 
-/**
- * 检查 UTF-8
- */
 function fm_is_utf8($string) {
     return preg_match('//u', $string);
 }
 
-/**
- * 转换 Windows 文件名
- */
 function fm_convert_win($filename) {
     if (FM_IS_WIN && function_exists('iconv')) {
         $filename = iconv(FM_ICONV_INPUT_ENC, 'UTF-8//IGNORE', $filename);
@@ -1752,9 +2234,6 @@ function fm_convert_win($filename) {
     return $filename;
 }
 
-/**
- * 获取文件图标
- */
 function fm_get_file_icon_class($path) {
     $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
     
@@ -1781,30 +2260,18 @@ function fm_get_file_icon_class($path) {
     return 'icon-document';
 }
 
-/**
- * 图片扩展名
- */
 function fm_get_image_exts() {
     return array('ico', 'gif', 'jpg', 'jpeg', 'jpc', 'jp2', 'jpx', 'xbm', 'wbmp', 'png', 'bmp', 'tif', 'tiff', 'webp', 'avif', 'svg');
 }
 
-/**
- * 视频扩展名
- */
 function fm_get_video_exts() {
     return array('webm', 'mp4', 'm4v', 'ogm', 'ogv', 'mov', 'avi', 'mpg', 'mpeg', 'mkv');
 }
 
-/**
- * 音频扩展名
- */
 function fm_get_audio_exts() {
     return array('wav', 'mp3', 'ogg', 'm4a', 'flac', 'aac');
 }
 
-/**
- * 文本扩展名
- */
 function fm_get_text_exts() {
     return array('txt', 'css', 'ini', 'conf', 'log', 'htaccess', 'passwd', 'sql', 'js', 'json', 'sh', 'config',
         'php', 'php4', 'php5', 'phps', 'phtml', 'htm', 'html', 'shtml', 'xhtml', 'xml', 'xsl', 'md', 'yml', 'yaml',
@@ -1812,24 +2279,42 @@ function fm_get_text_exts() {
         'map', 'lock', 'dtd', 'svg', 'bat', 'ps1');
 }
 
-/**
- * 文本 MIME 类型
- */
 function fm_get_text_mimes() {
     return array('application/xml', 'application/javascript', 'application/x-javascript', 
                  'image/svg+xml', 'message/rfc822', 'application/json');
 }
 
-/**
- * 文本文件名
- */
 function fm_get_text_names() {
     return array('license', 'readme', 'authors', 'contributors', 'changelog', 'composer');
 }
 
-/**
- * ZIP 操作类
- */
+function fm_get_upload_accept() {
+    if (empty(FM_UPLOAD_EXT)) return '';
+    
+    $exts = explode(',', FM_UPLOAD_EXT);
+    $mimeMap = array(
+        'jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg', 'png' => 'image/png',
+        'gif' => 'image/gif', 'webp' => 'image/webp', 'avif' => 'image/avif',
+        'pdf' => 'application/pdf',
+        'doc' => 'application/msword', 'docx' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'xls' => 'application/vnd.ms-excel', 'xlsx' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'zip' => 'application/zip',
+        'txt' => 'text/plain', 'csv' => 'text/csv',
+        'mp3' => 'audio/mpeg', 'mp4' => 'video/mp4',
+    );
+    
+    $accept = array();
+    foreach ($exts as $ext) {
+        $ext = trim($ext);
+        if (isset($mimeMap[$ext])) {
+            $accept[] = $mimeMap[$ext];
+        }
+        $accept[] = '.' . $ext;
+    }
+    
+    return implode(',', $accept);
+}
+
 class FM_Zipper {
     private $zip;
 
@@ -1909,28 +2394,23 @@ class FM_Zipper {
 
 // --- 模板函数 ---
 
-/**
- * 显示导航路径
- */
 function fm_show_nav_path($path) {
-    $csrf_token = get_csrf_token();
     ?>
 <div class="path">
 <div class="float-right" style="display:flex;gap:12px;align-items:center">
-<a href="?p=" title="Root directory" style="display:inline-flex;align-items:center;gap:4px;padding:4px 8px;border-radius:4px;background:#f3f4f6"><i class="icon-home"></i>根目录</a>
+<a href="?p=" title="Root directory" style="display:inline-flex;align-items:center;gap:4px;padding:4px 8px;border-radius:4px;background:#f3f4f6"><i class="icon-home"></i> Root</a>
 <?php if (!FM_READONLY): ?>
-<a href="?p=<?php echo urlencode(FM_PATH) ?>&amp;upload" title="Upload files" style="display:inline-flex;align-items:center;gap:4px;padding:4px 8px;border-radius:4px;background:#e0f2fe;color:#0369a1"><i class="icon-upload"></i>上传</a>
-<a href="#" onclick="newfolder('<?php echo fm_enc(FM_PATH) ?>');return false;" title="New folder" style="display:inline-flex;align-items:center;gap:4px;padding:4px 8px;border-radius:4px;background:#dcfce7;color:#166534"><i class="icon-folder_add"></i>新建文件夹</a>
-<a href="#" onclick="newfile('<?php echo fm_enc(FM_PATH) ?>');return false;" title="New file" style="display:inline-flex;align-items:center;gap:4px;padding:4px 8px;border-radius:4px;background:#fef3c7;color:#92400e"><i class="icon-document"></i>新建文件</a>
+<a href="?p=<?php echo urlencode(FM_PATH) ?>&amp;upload" title="Upload files" style="display:inline-flex;align-items:center;gap:4px;padding:4px 8px;border-radius:4px;background:#e0f2fe;color:#0369a1"><i class="icon-upload"></i> Upload</a>
+<a href="#" onclick="newfolder('<?php echo fm_enc(FM_PATH) ?>');return false;" title="New folder" style="display:inline-flex;align-items:center;gap:4px;padding:4px 8px;border-radius:4px;background:#dcfce7;color:#166534"><i class="icon-folder_add"></i> New Folder</a>
+<a href="#" onclick="newfile('<?php echo fm_enc(FM_PATH) ?>');return false;" title="New file" style="display:inline-flex;align-items:center;gap:4px;padding:4px 8px;border-radius:4px;background:#fef3c7;color:#92400e"><i class="icon-document"></i> New File</a>
 <?php endif; ?>
 <?php if (FM_USE_AUTH): ?>
-<a href="?logout=1" title="Logout" style="display:inline-flex;align-items:center;gap:4px;padding:4px 8px;border-radius:4px;background:#fee2e2;color:#991b1b"><i class="icon-logout"></i>退出</a>
+<a href="?logout=1" title="Logout" style="display:inline-flex;align-items:center;gap:4px;padding:4px 8px;border-radius:4px;background:#fee2e2;color:#991b1b"><i class="icon-logout"></i> Logout</a>
 <?php endif; ?>
 </div>
         <?php
         $path = fm_clean_path($path);
-        // 面包屑导航 - 带斜杠分隔符
-        $root_url = "<a href='?p=' title='根目录: " . fm_enc(FM_ROOT_PATH) . "' style='display:inline-flex;align-items:center'><i class='icon-home' style='margin-right:4px'></i>根目录</a>";
+        $root_url = "<a href='?p=' title='Root: " . fm_enc(FM_ROOT_PATH) . "' style='display:inline-flex;align-items:center'><i class='icon-home' style='margin-right:4px'></i> Root</a>";
         $sep = ' <span style="color:#9ca3af;margin:0 4px;">/</span> ';
         if ($path != '') {
             $exploded = explode('/', $path);
@@ -1950,9 +2430,6 @@ function fm_show_nav_path($path) {
 <?php
 }
 
-/**
- * 显示消息
- */
 function fm_show_message() {
     if (isset($_SESSION['message'])) {
         $class = $_SESSION['status'] ?? 'ok';
@@ -1961,9 +2438,6 @@ function fm_show_message() {
     }
 }
 
-/**
- * 显示页头
- */
 function fm_show_header() {
     $sprites_ver = '20240101';
     header("Content-Type: text/html; charset=utf-8");
@@ -1974,6 +2448,8 @@ function fm_show_header() {
     // 安全头
     header("X-Frame-Options: SAMEORIGIN");
     header("X-Content-Type-Options: nosniff");
+    header("X-XSS-Protection: 1; mode=block");
+    header("Referrer-Policy: strict-origin-when-cross-origin");
     ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -2009,8 +2485,6 @@ input[type="submit"]:hover,button:hover{background:#f3f4f6}
 .btn{border:0;background:none;padding:0;margin:0;font-weight:500;color:#2563eb;cursor:pointer}.btn:hover{color:#dc2626}
 .preview-img{max-width:100%;background:url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAKklEQVR42mL5//8/Azbw+PFjrOJMDCSCUQ3EABZc4S0rKzsaSvTTABBgAMyfCMsY4B9iAAAAAElFTkSuQmCC") repeat}
 .preview-video{position:relative;max-width:100%;height:0;padding-bottom:56.25%;margin-bottom:10px}.preview-video video{position:absolute;width:100%;height:100%;left:0;top:0;background:#000}
-
-/* 图标样式 */
 [class*="icon-"]{display:inline-block;width:16px;height:16px;background:url("<?php echo FM_SELF_URL ?>?img=sprites&amp;t=<?php echo $sprites_ver ?>") no-repeat 0 0;vertical-align:middle}
 .icon-document{background-position:-16px 0}.icon-folder{background-position:-32px 0}
 .icon-folder_add{background-position:-48px 0}.icon-upload{background-position:-64px 0}
@@ -2034,95 +2508,49 @@ input[type="submit"]:hover,button:hover{background:#f3f4f6}
 .icon-file_word{background-position:-320px -16px}.icon-file_zip{background-position:-336px -16px}
 .icon-logout{background-position:-304px 0}.icon-chain{background-position:-320px 0}
 .icon-link_folder{background-position:-352px -16px}.icon-link_file{background-position:-368px -16px}
-
-/* 表格样式 */
 .compact-table{border:0;width:auto}.compact-table td,.compact-table th{width:100px;border:0;text-align:center}.compact-table tr:hover td{background:#fff}
 .filename{max-width:400px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .break-word{word-wrap:break-word;word-break:break-word}
-
-/* 页脚 */
 .footer{text-align:center;margin-top:20px;padding:15px;color:#6b7280}
-
-/* 操作按钮统一样式 */
-.path a,
-.path button,
-.action-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    padding: 4px 10px;
-    margin: 0 2px;
-    border-radius: 4px;
-    transition: all 0.2s;
-    color: #374151;
-    text-decoration: none;
-}
-
-.path a:hover,
-.action-btn:hover {
-    background-color: #f3f4f6;
-    filter: brightness(0.95);
-    text-decoration: none;
-}
-
-.path a i,
-.action-btn i {
-    margin-right: 2px;
-}
-
-/* 面包屑导航链接样式 */
-.break-word a {
-    color: #2563eb;
-    text-decoration: none;
-}
-.break-word a:hover {
-    text-decoration: underline;
-    background: none;
-}
-
-/* 提交按钮样式 */
-input[type="submit"] {
-    margin-right: 8px;
-    padding: 6px 16px;
-}
-
-/* 带背景色的特殊按钮 */
-.btn-home {
-    background: #f3f4f6;
-    color: #374151;
-}
-.btn-upload {
-    background: #e0f2fe;
-    color: #0369a1;
-}
-.btn-newfolder {
-    background: #dcfce7;
-    color: #166534;
-}
-.btn-newfile {
-    background: #fef3c7;
-    color: #92400e;
-}
-.btn-logout {
-    background: #fee2e2;
-    color: #991b1b;
-}
-.btn-delete {
-    background: #fee2e2;
-    color: #991b1b;
-    border: 1px solid #fecaca;
-}
-.btn-zip, .btn-copy {
-    background: #f3f4f6;
-    border: 1px solid #d1d5db;
-}
-
-/* 文件列表操作按钮颜色 */
-.file-action-delete { color: #dc2626; }
-.file-action-rename { color: #2563eb; }
-.file-action-copy { color: #059669; }
-.file-action-link { color: #6b7280; }
-.file-action-download { color: #2563eb; }
+.upload-area{border:2px dashed #d1d5db;border-radius:8px;padding:30px;text-align:center;background:#fafafa;transition:all 0.3s;cursor:pointer;margin-bottom:20px}
+.upload-area:hover{border-color:#2563eb;background:#eff6ff}
+.upload-area.dragover{border-color:#2563eb;background:#dbeafe}
+.upload-area input[type="file"]{display:none}
+.upload-icon{font-size:48px;color:#9ca3af;margin-bottom:10px}
+.upload-text{font-size:16px;color:#6b7280;margin-bottom:5px}
+.upload-hint{font-size:13px;color:#9ca3af}
+.upload-queue{margin-top:20px;max-height:400px;overflow-y:auto}
+.upload-item{background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:12px;margin-bottom:10px}
+.upload-item-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.upload-item-name{font-weight:500;color:#374151;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:300px}
+.upload-item-size{font-size:12px;color:#6b7280}
+.upload-item-status{display:flex;align-items:center;gap:8px}
+.upload-status-badge{font-size:12px;padding:2px 8px;border-radius:12px;background:#f3f4f6;color:#6b7280}
+.upload-status-badge.success{background:#dcfce7;color:#166534}
+.upload-status-badge.error{background:#fee2e2;color:#991b1b}
+.upload-status-badge.uploading{background:#dbeafe;color:#1e40af}
+.upload-progress{height:6px;background:#e5e7eb;border-radius:3px;overflow:hidden;margin:8px 0}
+.upload-progress-bar{height:100%;background:linear-gradient(90deg,#2563eb,#3b82f6);border-radius:3px;transition:width 0.3s;width:0%}
+.upload-progress-bar.error{background:#ef4444}
+.upload-progress-bar.success{background:#10b981}
+.upload-item-actions{display:flex;gap:8px;margin-top:8px}
+.upload-btn{font-size:12px;padding:4px 10px;border-radius:4px;border:1px solid #d1d5db;background:#fff;cursor:pointer;transition:all 0.2s}
+.upload-btn:hover{background:#f3f4f6}
+.upload-btn.retry{color:#2563eb;border-color:#2563eb}
+.upload-btn.cancel{color:#dc2626;border-color:#dc2626}
+.upload-error-message{font-size:12px;color:#dc2626;margin-top:4px;padding:4px 8px;background:#fef2f2;border-radius:4px}
+.upload-actions{display:flex;justify-content:space-between;align-items:center;margin-top:20px;padding-top:15px;border-top:1px solid #e5e7eb}
+.upload-summary{font-size:14px;color:#6b7280}
+.upload-buttons{display:flex;gap:10px}
+.upload-btn-primary{padding:8px 20px;background:#2563eb;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:500}
+.upload-btn-primary:hover{background:#1d4ed8}
+.upload-btn-primary:disabled{background:#9ca3af;cursor:not-allowed}
+.upload-btn-secondary{padding:8px 20px;background:#fff;color:#6b7280;border:1px solid #d1d5db;border-radius:6px;cursor:pointer}
+.upload-btn-secondary:hover{background:#f3f4f6}
+.upload-toast{position:fixed;bottom:20px;right:20px;padding:12px 20px;background:#1f2937;color:#fff;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.15);z-index:9999;animation:slideIn 0.3s;max-width:350px}
+.upload-toast.error{background:#dc2626}
+.upload-toast.success{background:#10b981}
+@keyframes slideIn{from{transform:translateX(100%);opacity:0}to{transform:translateX(0);opacity:1}}
 </style>
 <link rel="icon" href="<?php echo FM_SELF_URL ?>?img=favicon" type="image/png">
 <?php if (isset($_GET['view']) && FM_USE_HIGHLIGHTJS): ?>
@@ -2134,9 +2562,6 @@ input[type="submit"] {
 <?php
 }
 
-/**
- * 显示页脚
- */
 function fm_show_footer() {
     ?>
 <div class="footer">
@@ -2146,19 +2571,19 @@ function fm_show_footer() {
 <script>
 function newfolder(p){
     var n = prompt('New folder name:', 'folder');
-    if(n !== null && n !== ''){
+    if(n !== null && n !== '' && n.length <= 255){
         window.location.search = 'p=' + encodeURIComponent(p) + '&new=' + encodeURIComponent(n) + '&csrf_token=<?php echo urlencode(get_csrf_token()); ?>';
     }
 }
 function newfile(p){
     var n = prompt('New file name:', 'file.txt');
-    if(n !== null && n !== ''){
+    if(n !== null && n !== '' && n.length <= 255){
         window.location.search = 'p=' + encodeURIComponent(p) + '&newfile=' + encodeURIComponent(n) + '&csrf_token=<?php echo urlencode(get_csrf_token()); ?>';
     }
 }
 function rename(p, f){
     var n = prompt('New name:', f);
-    if(n !== null && n !== '' && n != f){
+    if(n !== null && n !== '' && n != f && n.length <= 255){
         window.location.search = 'p=' + encodeURIComponent(p) + '&ren=' + encodeURIComponent(f) + '&to=' + encodeURIComponent(n) + '&csrf_token=<?php echo urlencode(get_csrf_token()); ?>';
     }
 }
@@ -2184,24 +2609,16 @@ function checkbox_toggle(){
     change_checkboxes(l, !allChecked);
     if(selectAll) selectAll.checked = !allChecked;
 }
-// 键盘快捷键
 document.addEventListener('keydown', function(e) {
-    // 按 H 键回到根目录（不区分大小写，且不在输入框中）
-    if ((e.key === 'h' || e.key === 'H') && 
-        !['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) {
-        window.location.href = '?p=';
+    if (e.key === 'h' || e.key === 'H') {
+        if (!['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) {
+            window.location.href = '?p=';
+        }
     }
-    // 按 U 键打开上传页面
-    if ((e.key === 'u' || e.key === 'U') && 
-        !['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName) &&
-        <?php echo FM_READONLY ? 'false' : 'true' ?>) {
-        window.location.href = '?p=<?php echo urlencode(FM_PATH) ?>&upload';
-    }
-    // 按 N 键新建文件夹
-    if ((e.key === 'n' || e.key === 'N') && 
-        !['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName) &&
-        <?php echo FM_READONLY ? 'false' : 'true' ?>) {
-        newfolder('<?php echo fm_enc(FM_PATH) ?>');
+    if (e.key === 'u' || e.key === 'U') {
+        if (!['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName) && <?php echo FM_READONLY ? 'false' : 'true' ?>) {
+            window.location.href = '?p=<?php echo urlencode(FM_PATH) ?>&upload';
+        }
     }
 });
 </script>
@@ -2214,9 +2631,6 @@ document.addEventListener('keydown', function(e) {
 <?php
 }
 
-/**
- * 显示图片
- */
 function fm_show_image($img) {
     $modified_time = gmdate('D, d M Y 00:00:00') . ' GMT';
     $expires_time = gmdate('D, d M Y 00:00:00', strtotime('+1 day')) . ' GMT';
@@ -2240,9 +2654,6 @@ function fm_show_image($img) {
     exit;
 }
 
-/**
- * 获取图片资源
- */
 function fm_get_images() {
     return array(
         'favicon' => 'iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAGXRFWHRTb2Z0d2FyZQBBZG9iZSBJ
