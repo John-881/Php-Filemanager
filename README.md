@@ -84,7 +84,7 @@ $ip_ruleset = 'AND';  // OFF / AND / OR
 
 ### 生成密码哈希
 
-访问 `https://yourdomain.com/filemanager.php?p=&help=2` 或使用 PHP 命令：
+请使用`passwd.php`网页在上生成 或使用 PHP 命令：
 
 ```php
 php -r "echo password_hash('your_password', PASSWORD_DEFAULT);"
