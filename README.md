@@ -30,7 +30,7 @@
 git clone https://github.com/John-881/Php-Filemanager.git
 
 # 或直接下载
-wget https://raw.githubusercontent.com/John-881/Php-Filemanager/refs/heads/master/filemanager.php
+wget https://github.com/John-881/Php-Filemanager/archive/refs/heads/master.zip
 ```
 
 ### 2. 配置密码
